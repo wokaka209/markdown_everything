@@ -1,0 +1,87 @@
+﻿[2026-04-11 15:47:11] [SUCCESS] Found conda: conda 23.3.1
+[2026-04-11 15:47:18] [INFO] Listing all conda environments...
+[2026-04-11 15:47:51] [INFO] Environment 'markitdown' not found
+[2026-04-11 15:47:51] [WARNING] Environment 'markitdown' not found
+[2026-04-11 15:48:24] [INFO] Environment 'markitdown' not found
+[2026-04-11 15:48:24] [WARNING] Environment 'markitdown' not found
+[2026-04-11 15:49:15] [INFO] Environment 'markitdown' found
+[2026-04-11 15:49:15] [SUCCESS] Environment 'markitdown' exists
+[2026-04-11 15:49:44] [INFO] Environment 'markitdown' found
+[2026-04-11 15:49:44] [INFO] Activating environment 'markitdown' and running: python --version
+[2026-04-11 15:50:22] [INFO] Environment 'markitdown' found
+[2026-04-11 15:50:22] [INFO] Activating environment 'markitdown' and running: python convert_document.py --list-formats
+[2026-04-11 20:27:31] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 20:27:31] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 20:27:42] [INFO] Listing all conda environments...
+[2026-04-11 20:27:42] [INFO] Operating System: Windows
+[2026-04-11 20:28:13] [INFO] Environment 'markitdown' found
+[2026-04-11 20:28:13] [SUCCESS] Environment 'markitdown' exists
+[2026-04-11 20:28:34] [INFO] Environment 'markitdown' found
+[2026-04-11 20:28:34] [INFO] Activating environment 'markitdown' and running: python convert_document.py --list-formats
+[2026-04-11 20:28:34] [INFO] Platform: Windows
+[2026-04-11 20:56:10] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 20:56:10] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 20:56:19] [ERROR] Input file not found: e:\whx_Graduation project\tools\test_document.docx
+[2026-04-11 20:56:33] [ERROR] Input file not found: e:\whx_Graduation project\tools\SJ0202-2021版-成都信息工程大学本科毕业设计（论文）格式与内容说明.docx
+[2026-04-11 20:56:59] [INFO] Created output directory: e:\whx_Graduation project\tools\test_output
+[2026-04-11 20:56:59] [INFO] Converting document...
+[2026-04-11 20:56:59] [INFO]   Input: E:\whx_Graduation project\tools\.trae\skills\markdown_everything\scripts\test.txt
+[2026-04-11 20:56:59] [INFO]   Output: E:\whx_Graduation project\tools\test_output\test.md
+[2026-04-11 20:57:05] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 20:57:05] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 20:57:15] [INFO] Environment 'markitdown' found
+[2026-04-11 20:57:15] [INFO] Using conda environment: markitdown
+[2026-04-11 20:57:29] [SUCCESS] Document converted successfully: E:\whx_Graduation project\tools\test_output\test.md
+[2026-04-11 20:57:29] [INFO] Output directory: e:\whx_Graduation project\tools\test_output
+[2026-04-11 20:57:55] [INFO] Created output directory: e:\whx_Graduation project\tools\test_output_pip
+[2026-04-11 20:57:55] [INFO] Converting document...
+[2026-04-11 20:57:55] [INFO]   Input: E:\whx_Graduation project\tools\.trae\skills\markdown_everything\scripts\test.txt
+[2026-04-11 20:57:55] [INFO]   Output: E:\whx_Graduation project\tools\test_output_pip\test.md
+[2026-04-11 20:58:00] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 20:58:00] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 20:58:11] [INFO] Environment 'markitdown' found
+[2026-04-11 20:58:11] [INFO] Using conda environment: markitdown
+[2026-04-11 20:58:24] [SUCCESS] Document converted successfully: E:\whx_Graduation project\tools\test_output_pip\test.md
+[2026-04-11 20:58:24] [INFO] Output directory: e:\whx_Graduation project\tools\test_output_pip
+[2026-04-11 20:59:17] [INFO] Created output directory: e:\whx_Graduation project\tools\test_output_pip2
+[2026-04-11 20:59:17] [INFO] Converting document...
+[2026-04-11 20:59:17] [INFO]   Input: E:\whx_Graduation project\tools\.trae\skills\markdown_everything\scripts\test.txt
+[2026-04-11 20:59:17] [INFO]   Output: E:\whx_Graduation project\tools\test_output_pip2\test.md
+[2026-04-11 20:59:23] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 20:59:23] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 20:59:23] [INFO] Force pip mode enabled...
+[2026-04-11 20:59:23] [SUCCESS] Found Python: Python 3.9.13
+[2026-04-11 20:59:23] [INFO] Python path: D:\anaconda\python.exe
+[2026-04-11 20:59:23] [ERROR] Failed to convert document
+[2026-04-11 20:59:57] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 20:59:57] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 21:00:09] [INFO] Environment 'markitdown' found
+[2026-04-11 21:00:09] [INFO] Environment 'markitdown' already exists
+[2026-04-11 21:00:09] [SUCCESS] Setup completed successfully!
+[2026-04-11 21:00:54] [INFO] Force pip mode enabled...
+[2026-04-11 21:00:54] [INFO] Installing markitdown with all optional dependencies using pip...
+[2026-04-11 21:01:04] [SUCCESS] Markitdown installed successfully using pip
+[2026-04-11 21:01:13] [INFO] Force pip mode enabled...
+[2026-04-11 21:01:13] [INFO] Installing markitdown with all optional dependencies using pip...
+[2026-04-11 21:01:20] [SUCCESS] Markitdown installed successfully using pip
+[2026-04-11 21:01:31] [INFO] Created output directory: e:\whx_Graduation project\tools\test_output_pip3
+[2026-04-11 21:01:31] [INFO] Converting document...
+[2026-04-11 21:01:31] [INFO]   Input: E:\whx_Graduation project\tools\.trae\skills\markdown_everything\scripts\test.txt
+[2026-04-11 21:01:31] [INFO]   Output: E:\whx_Graduation project\tools\test_output_pip3\test.md
+[2026-04-11 21:01:36] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 21:01:36] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 21:01:36] [INFO] Force pip mode enabled...
+[2026-04-11 21:01:36] [SUCCESS] Found Python: Python 3.9.13
+[2026-04-11 21:01:36] [INFO] Python path: D:\anaconda\python.exe
+[2026-04-11 21:01:37] [ERROR] Failed to convert document
+[2026-04-11 21:09:13] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 21:09:13] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 21:09:24] [INFO] Converting document...
+[2026-04-11 21:09:24] [INFO]   Input: E:\whx_Graduation project\tools\.trae\documents\SJ0202-2021版-成都信息工程大学本科毕业设计（论文）格式与内容说明.docx
+[2026-04-11 21:09:24] [INFO]   Output: E:\whx_Graduation project\tools\.trae\documents\SJ0202-2021版-成都信息工程大学本科毕业设计（论文）格式与内容说明.md
+[2026-04-11 21:09:29] [SUCCESS] Found conda (Windows): conda 23.3.1
+[2026-04-11 21:09:29] [INFO] Conda path: D:\anaconda\Library\bin\conda.bat
+[2026-04-11 21:09:40] [INFO] Environment 'markitdown' found
+[2026-04-11 21:09:40] [INFO] Using conda environment: markitdown
+[2026-04-11 21:09:55] [SUCCESS] Document converted successfully: E:\whx_Graduation project\tools\.trae\documents\SJ0202-2021版-成都信息工程大学本科毕业设计（论文）格式与内容说明.md
+[2026-04-11 21:09:55] [INFO] Output directory: e:\whx_Graduation project\tools\.trae\documents

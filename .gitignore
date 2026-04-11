@@ -1,0 +1,10 @@
+.env
+.output/
+.test/
+.test_output/
+.test_output_pip/
+.test_output_pip2/
+.test_output_pip3/
+.trae/
+*__pycache__/
+test_markdown.py
