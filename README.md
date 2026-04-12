@@ -9,7 +9,7 @@
 [![made-with-markdown](https://img.shields.io/badge/Made%20with-Markitdown-orange)](https://github.com/microsoft/markitdown)
 
 
-- ENreadme [English](README_en.md)
+- English document [English](README_en.md)
 
 [项目文件](#项目文件) · [核心用途](#核心用途) · [使用方法](#使用方法) · [前置要求](#前置要求)
 
