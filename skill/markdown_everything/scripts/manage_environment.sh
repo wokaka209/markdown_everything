@@ -1,22 +1,20 @@
 #!/bin/bash
 # MarkItDown Environment Manager
-# 跨平台Conda环境管理器 - 支持Windows (Git Bash)、Linux、macOS
+# 智能环境管理器 - 自动检测并设置 Python/Conda 环境
+# 流程: Python检测 -> Conda检测 -> 虚拟环境创建 -> 依赖安装
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_NAME="${MARKITDOWN_ENV_NAME:-markitdown}"
-PYTHON_VERSION="${MARKITDOWN_PYTHON_VER:-3.12}"
 LOG_FILE="${SCRIPT_DIR}/environment.log"
+VENV_DIR="${SCRIPT_DIR}/.venv"
+ENV_NAME="markitdown"
 
 PIP_TIMEOUT="${MARKITDOWN_PIP_TIMEOUT:-120}"
 PIP_RETRIES="${MARKITDOWN_PIP_RETRIES:-3}"
 PIP_MIRROR="${MARKITDOWN_PIP_MIRROR:-default}"
 CUSTOM_MIRROR="${MARKITDOWN_CUSTOM_MIRROR:-}"
-
-# ============================================
-# 跨平台配置和检测
-# ============================================
+ENV_TYPE="${MARKITDOWN_ENV_TYPE:-auto}"
 
 detect_os() {
     local os_name="Unknown"
@@ -34,32 +32,13 @@ detect_os() {
 
 SCRIPT_OS="$(detect_os)"
 
-if [[ "$SCRIPT_OS" == "Windows" ]]; then
-    PATH_SEPARATOR="\\"
-    ENV_SEPARATOR=";"
-    CONDA_PATHS=(
-        "$USERPROFILE/.conda"
-        "$USERPROFILE/Anaconda3"
-        "$USERPROFILE/Miniconda3"
-        "/c/.conda"
-        "/c/Anaconda3"
-        "/c/Miniconda3"
-    )
-else
-    PATH_SEPARATOR="/"
-    ENV_SEPARATOR=":"
-    CONDA_PATHS=(
-        "$HOME/.conda"
-        "$HOME/anaconda3"
-        "$HOME/miniconda3"
-        "/opt/anaconda3"
-        "/opt/miniconda3"
-    )
-fi
-
-# ============================================
-# 日志函数
-# ============================================
+CONDA_PATHS=(
+    "$HOME/.conda"
+    "$HOME/anaconda3"
+    "$HOME/miniconda3"
+    "/opt/anaconda3"
+    "/opt/miniconda3"
+)
 
 log_info() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO] $*" | tee -a "$LOG_FILE"
@@ -77,9 +56,88 @@ log_error() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $*" | tee -a "$LOG_FILE" >&2
 }
 
-# ============================================
-# 跨平台工具函数
-# ============================================
+test_python_version() {
+    if ! command -v python &> /dev/null; then
+        log_error "未找到 Python"
+        return 1
+    fi
+
+    local version_output
+    version_output=$(python --version 2>&1)
+
+    if [[ "$version_output" =~ Python\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+        local major="${BASH_REMATCH[1]}"
+        local minor="${BASH_REMATCH[2]}"
+        local patch="${BASH_REMATCH[3]}"
+        local full_version="$major.$minor.$patch"
+
+        if [[ $major -gt 3 ]] || [[ $major -eq 3 && $minor -gt 11 ]] || [[ $major -eq 3 && $minor -eq 11 ]]; then
+            log_success "Python 版本: $full_version (满足要求 >= 3.11)"
+            echo "$full_version"
+            return 0
+        else
+            log_error "Python 版本过低: $full_version (需要 >= 3.11)"
+            return 1
+        fi
+    fi
+
+    log_error "无法解析 Python 版本"
+    return 1
+}
+
+test_conda_available() {
+    if command -v conda &> /dev/null; then
+        local version
+        version=$(conda --version 2>&1)
+        log_success "找到 Conda: $version"
+        return 0
+    fi
+
+    for conda_path in "${CONDA_PATHS[@]}"; do
+        if [[ -f "$conda_path/conda" ]]; then
+            export PATH="$conda_path:$PATH"
+            local version
+            version=$(conda --version 2>&1)
+            log_success "找到 Conda: $version"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+test_conda_environment_exists() {
+    local env_name="$1"
+
+    if conda env list 2>/dev/null | grep -qE "(^|\s)${env_name}(\s|$)"; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+get_conda_python_path() {
+    local env_name="$1"
+
+    for conda_path in "${CONDA_PATHS[@]}"; do
+        local python_path="$conda_path/envs/$env_name/bin/python"
+
+        if [[ "$SCRIPT_OS" == "Windows" ]]; then
+            python_path="$conda_path/envs/$env_name/Scripts/python.exe"
+        fi
+
+        if [[ -f "$python_path" ]]; then
+            echo "$python_path"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+get_venv_python_path() {
+    echo "$VENV_DIR/bin/python"
+}
 
 get_pip_mirror_index() {
     local mirror_type="$1"
@@ -104,30 +162,25 @@ get_pip_mirror_index() {
     esac
 }
 
-get_pip_install_options() {
-    local mirror_type="$1"
-    local custom_index="$2"
-    local options=()
+install_package() {
+    local python_exe="$1"
+    local package="$2"
+    local mirror_type="$3"
+    local custom_index="$4"
 
-    options+=("--no-cache-dir" "--retries" "$PIP_RETRIES" "--timeout" "$PIP_TIMEOUT")
+    log_info "安装 $package..."
+    log_info "使用镜像: $mirror_type"
+
+    local install_args=("-m" "pip" "install" "--no-cache-dir" "$package")
 
     local mirror_index
     mirror_index=$(get_pip_mirror_index "$mirror_type" "$custom_index")
 
     if [[ -n "$mirror_index" ]]; then
-        options+=("-i" "$mirror_index")
         local trusted_host
         trusted_host=$(echo "$mirror_index" | sed -E 's|https?://||' | sed -E 's|/simple.*$||')
-        options+=("--trusted-host" "$trusted_host")
+        install_args+=("-i" "$mirror_index" "--trusted-host" "$trusted_host")
     fi
-
-    echo "${options[@]}"
-}
-
-install_with_retry() {
-    local pip_cmd="$1"
-    shift
-    local install_args=("$@")
 
     local attempt=0
     local success=false
@@ -137,307 +190,283 @@ install_with_retry() {
 
         if [[ $attempt -gt 1 ]]; then
             local wait_time=$((2 ** (attempt - 1)))
-            log_warning "Retry attempt $attempt/$PIP_RETRIES, waiting $wait_time seconds..."
+            log_warning "重试 $attempt/$PIP_RETRIES，等待 $wait_time 秒..."
             sleep "$wait_time"
-        else
-            log_info "Attempt $attempt/$PIP_RETRIES..."
         fi
 
-        if "$pip_cmd" install "${install_args[@]}" 2>&1 | tee -a "$LOG_FILE"; then
+        if "$python_exe" "${install_args[@]}" 2>&1 | tee -a "$LOG_FILE"; then
+            log_success "$package 安装成功"
             success=true
         else
-            log_warning "Attempt $attempt failed with exit code $?"
+            log_warning "安装尝试 $attempt 失败"
         fi
     done
 
-    if [[ "$success" == "true" ]]; then
-        return 0
-    else
-        log_error "Failed to install after $attempt attempts"
-        log_info "Try using a different mirror: --mirror tsinghua|aliyun|douban"
-        return 1
-    fi
-}
-
-check_conda_cmd() {
-    if command -v conda &> /dev/null; then
-        return 0
-    fi
-
-    for conda_path in "${CONDA_PATHS[@]}"; do
-        if [[ -f "$conda_path/conda.exe" ]] || [[ -f "$conda_path/conda" ]]; then
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-get_conda_exe() {
-    if command -v conda &> /dev/null; then
-        command -v conda
-        return 0
-    fi
-
-    for conda_path in "${CONDA_PATHS[@]}"; do
-        if [[ -f "$conda_path/conda.exe" ]]; then
-            echo "$conda_path/conda.exe"
-            return 0
-        elif [[ -f "$conda_path/conda" ]]; then
-            echo "$conda_path/conda"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-get_python_exe() {
-    local env_name="$1"
-
-    for conda_path in "${CONDA_PATHS[@]}"; do
-        local python_path="$conda_path/envs/$env_name/bin/python"
-
-        if [[ "$SCRIPT_OS" == "Windows" ]]; then
-            python_path="$conda_path/envs/$env_name/Scripts/python.exe"
-        fi
-
-        if [[ -f "$python_path" ]]; then
-            echo "$python_path"
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-# ============================================
-# Conda管理函数
-# ============================================
-
-check_conda() {
-    if check_conda_cmd; then
-        local conda_version
-        conda_version=$(conda --version 2>&1)
-        log_success "Found conda ($SCRIPT_OS): $conda_version"
-
-        local conda_exe
-        if conda_exe=$(get_conda_exe); then
-            log_info "Conda path: $conda_exe"
-        fi
-
-        return 0
-    else
-        log_error "Conda not found in PATH."
-        log_info "Please install Miniconda or Anaconda first."
-        log_info "Download: https://docs.conda.io/en/latest/miniconda.html"
-        return 1
-    fi
-}
-
-list_environments() {
-    log_info "Listing all conda environments..."
-    log_info "Operating System: $SCRIPT_OS"
-
-    if ! check_conda_cmd; then
-        log_error "Conda not available"
+    if [[ "$success" == "false" ]]; then
+        log_error "$package 安装失败"
         return 1
     fi
 
-    conda env list
     return 0
 }
 
-environment_exists() {
-    local env_name="$1"
-    log_info "Checking if environment '$env_name' exists..."
+new_venv_environment() {
+    local python_exe="$1"
 
-    if conda env list 2>/dev/null | grep -qE "(^|\s)${env_name}(\s|$)"; then
-        log_info "Environment '$env_name' found"
+    log_info "创建虚拟环境..."
+
+    if [[ -d "$VENV_DIR" ]]; then
+        log_info "虚拟环境已存在: $VENV_DIR"
+        return 0
+    fi
+
+    if "$python_exe" -m venv "$VENV_DIR" 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "虚拟环境创建成功: $VENV_DIR"
         return 0
     else
-        log_info "Environment '$env_name' not found"
+        log_error "虚拟环境创建失败"
         return 1
     fi
 }
 
-create_environment() {
-    local env_name="$1"
-    local python_ver="$2"
-    local force="${3:-false}"
+setup_with_conda() {
+    log_info "使用 Conda 环境..."
 
-    if environment_exists "$env_name"; then
-        if [[ "$force" == "true" ]]; then
-            log_warning "Environment '$env_name' exists. Recreating with --force flag..."
-            remove_environment "$env_name"
+    if test_conda_environment_exists "$ENV_NAME"; then
+        log_info "Conda 环境 '$ENV_NAME' 已存在"
+        local python_exe
+        if python_exe=$(get_conda_python_path "$ENV_NAME"); then
+            if install_package "$python_exe" 'markitdown[all]' "$PIP_MIRROR" "$CUSTOM_MIRROR"; then
+                log_success "Conda 环境设置完成"
+                return 0
+            fi
+        fi
+    else
+        log_info "创建 Conda 环境..."
+        if conda create -n "$ENV_NAME" python=3.11 -y 2>&1 | tee -a "$LOG_FILE"; then
+            log_success "Conda 环境创建成功"
+            local python_exe
+            if python_exe=$(get_conda_python_path "$ENV_NAME"); then
+                if install_package "$python_exe" 'markitdown[all]' "$PIP_MIRROR" "$CUSTOM_MIRROR"; then
+                    log_success "Conda 环境设置完成"
+                    return 0
+                fi
+            fi
         else
-            log_warning "Environment '$env_name' already exists. Use --force to recreate."
-            return 0
+            log_error "Conda 环境创建失败"
         fi
     fi
 
-    log_info "Creating new conda environment '$env_name' with Python $python_ver..."
-    log_info "Platform: $SCRIPT_OS"
-
-    if conda create -n "$env_name" "python=$python_ver" -y 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "Environment '$env_name' created successfully"
-        return 0
-    else
-        log_error "Failed to create environment '$env_name'"
-        return 1
-    fi
+    return 1
 }
 
-remove_environment() {
-    local env_name="$1"
+setup_with_venv() {
+    log_info "使用 venv 虚拟环境..."
 
-    log_warning "Removing environment '$env_name'..."
-
-    if conda env remove -n "$env_name" -y 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "Environment '$env_name' removed successfully"
-        return 0
-    else
-        log_error "Failed to remove environment '$env_name'"
+    if ! test_python_version &>/dev/null; then
+        log_error "Python 不可用"
         return 1
     fi
-}
-
-install_markitdown() {
-    local env_name="$1"
-
-    if ! environment_exists "$env_name"; then
-        log_error "Environment '$env_name' does not exist. Cannot install markitdown."
-        return 1
-    fi
-
-    log_info "Installing markitdown with all optional dependencies in '$env_name'..."
-    log_info "Mirror: $PIP_MIRROR"
-
-    local pip_options
-    pip_options=$(get_pip_install_options "$PIP_MIRROR" "$CUSTOM_MIRROR")
-    read -ra pip_options_array <<< "$pip_options"
 
     local python_exe
-    if python_exe=$(get_python_exe "$env_name"); then
-        log_info "Using Python: $python_exe"
-        if install_with_retry "$python_exe -m pip" install 'markitdown[all]' "${pip_options_array[@]}"; then
-            log_success "Markitdown installed successfully in '$env_name'"
-            return 0
-        else
-            log_error "Failed to install markitdown using direct pip"
-            return 1
-        fi
+    python_exe=$(command -v python)
+
+    if [[ -d "$VENV_DIR" ]]; then
+        log_info "虚拟环境已存在: $VENV_DIR"
     else
-        log_info "Python not found in expected path, using conda run"
-        if install_with_retry conda run -n "$env_name" pip install 'markitdown[all]' "${pip_options_array[@]}"; then
-            log_success "Markitdown installed successfully in '$env_name'"
-            return 0
-        else
-            log_error "Failed to install markitdown"
+        if ! new_venv_environment "$python_exe"; then
             return 1
         fi
     fi
-}
 
-activate_and_run() {
-    local env_name="$1"
-    shift
-    local cmd="$@"
+    local venv_python
+    venv_python=$(get_venv_python_path)
 
-    if ! environment_exists "$env_name"; then
-        log_error "Environment '$env_name' does not exist"
-        return 1
+    if install_package "$venv_python" 'markitdown[all]' "$PIP_MIRROR" "$CUSTOM_MIRROR"; then
+        log_success "虚拟环境设置完成"
+        return 0
     fi
 
-    log_info "Activating environment '$env_name' and running: $cmd"
-    log_info "Platform: $SCRIPT_OS"
-
-    conda run -n "$env_name" $cmd
+    return 1
 }
 
 setup_environment() {
-    local force="${1:-false}"
+    log_info "======================================"
+    log_info "环境检测开始"
+    log_info "======================================"
+    log_info ""
+    log_info "步骤 1: 检测 Python 环境"
 
-    if ! check_conda; then
+    if ! test_python_version; then
+        log_error "未找到 Python，请先安装 Python 3.11+"
+        log_info "下载地址: https://www.python.org/downloads/"
         return 1
     fi
 
-    if environment_exists "$ENV_NAME"; then
-        if [[ "$force" == "true" ]]; then
-            log_warning "Environment exists. Recreating with --force flag..."
-            remove_environment "$ENV_NAME"
+    log_info ""
+    log_info "步骤 2: 检测 Conda 环境"
+
+    if test_conda_available; then
+        log_info "Conda 可用"
+        if [[ "$ENV_TYPE" == "venv" ]]; then
+            log_warning "用户指定使用 venv，将跳过 Conda"
         else
-            log_info "Environment '$ENV_NAME' already exists"
-            log_success "Setup completed successfully!"
+            log_info "使用 Conda 环境"
+            if setup_with_conda; then
+                return 0
+            fi
+            log_warning "Conda 设置失败，尝试使用 venv..."
+        fi
+    else
+        log_info "Conda 不可用"
+    fi
+
+    if [[ "$ENV_TYPE" == "conda" ]]; then
+        log_error "用户指定使用 Conda，但 Conda 不可用"
+        return 1
+    fi
+
+    log_info ""
+    log_info "步骤 3: 创建虚拟环境 (venv)"
+    if setup_with_venv; then
+        return 0
+    fi
+
+    return 1
+}
+
+get_environment_python() {
+    if test_conda_available && test_conda_environment_exists "$ENV_NAME"; then
+        local python_path
+        if python_path=$(get_conda_python_path "$ENV_NAME"); then
+            echo "$python_path"
             return 0
         fi
     fi
 
-    if ! create_environment "$ENV_NAME" "$PYTHON_VERSION" "false"; then
-        return 1
+    if [[ -d "$VENV_DIR" ]]; then
+        local venv_python
+        venv_python=$(get_venv_python_path)
+        if [[ -f "$venv_python" ]]; then
+            echo "$venv_python"
+            return 0
+        fi
     fi
 
-    if ! install_markitdown "$ENV_NAME"; then
-        return 1
-    fi
-
-    log_success "Setup completed successfully!"
-    return 0
+    return 1
 }
 
-get_activation_command() {
-    echo ""
-    echo "=== Environment Setup Complete ==="
-    echo ""
-    echo "Platform: $SCRIPT_OS"
-    echo ""
-    echo "To activate the $ENV_NAME environment, run:"
-    echo ""
-    echo -e "\033[33m    conda activate $ENV_NAME\033[0m"
-    echo ""
-    echo "Or use the following command to run markitdown:"
-    echo ""
-    echo -e "\033[33m    conda run -n $ENV_NAME python convert_document.py <file_path>\033[0m"
-    echo ""
+run_command() {
+    if [[ $# -eq 0 ]]; then
+        log_error "请指定要运行的命令"
+        return 1
+    fi
+
+    local python_exe
+    if ! python_exe=$(get_environment_python); then
+        log_error "未找到可用的 Python 环境"
+        log_info "请先运行 setup 命令设置环境"
+        return 1
+    fi
+
+    log_info "使用 Python: $python_exe"
+    log_info "运行命令: $*"
+
+    cd "$SCRIPT_DIR"
+    if "$python_exe" "$@"; then
+        return 0
+    else
+        log_error "命令执行失败"
+        return 1
+    fi
+}
+
+convert_document() {
+    local input_path="$1"
+    local output_dir="${2:-.}"
+
+    if [[ -z "$input_path" ]]; then
+        log_error "请提供输入文件路径"
+        return 1
+    fi
+
+    if [[ ! -f "$input_path" ]]; then
+        log_error "输入文件不存在: $input_path"
+        return 1
+    fi
+
+    local input_base_name
+    input_base_name=$(basename "$input_path" | sed 's/\.[^.]*$//')
+    local output_file="$output_dir/$input_base_name.md"
+
+    if [[ ! -d "$output_dir" ]]; then
+        mkdir -p "$output_dir" 2>/dev/null || true
+        log_info "创建输出目录: $output_dir"
+    fi
+
+    log_info "转换文档..."
+    log_info "  输入: $(realpath "$input_path")"
+    log_info "  输出: $output_file"
+
+    local python_exe
+    if ! python_exe=$(get_environment_python); then
+        log_error "未找到可用的 Python 环境"
+        return 1
+    fi
+
+    log_info "使用 Python: $python_exe"
+
+    cd "$SCRIPT_DIR"
+    if "$python_exe" "convert_document.py" "$input_path" -o "$output_file" 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "文档转换成功: $output_file"
+        return 0
+    else
+        log_error "文档转换失败"
+        return 1
+    fi
 }
 
 show_help() {
     cat << EOF
 
 ================================================================================
-MarkItDown Environment Manager - 跨平台Conda环境管理器
+MarkItDown 环境管理器 - 智能环境检测与设置
 ================================================================================
 
-当前平台: $SCRIPT_OS
+平台: $SCRIPT_OS
 
 用法: $0 <命令> [选项]
 
 --------------------------------------------------------------------------------
+环境检测流程:
+--------------------------------------------------------------------------------
+  步骤 1: 检测 Python >= 3.11
+  步骤 2: 检测 Conda 环境
+  步骤 3: 如无 Conda，创建 venv 虚拟环境
+  步骤 4: 安装 markitdown[all]
+
+--------------------------------------------------------------------------------
 命令:
 --------------------------------------------------------------------------------
-    check               检查conda是否可用
-    list                列出所有conda环境
-    exists [名称]       检查指定环境是否存在（默认: $ENV_NAME）
-    create [名称]       创建新环境（默认: $ENV_NAME）
-    remove [名称]       移除指定环境（默认: $ENV_NAME）
-    install [名称]      安装markitdown到指定环境（默认: $ENV_NAME）
-    setup               完整设置环境（创建+安装）
-    run [命令]          在指定环境中运行命令（默认: $ENV_NAME）
-    help                显示此帮助信息
+    check              检查环境状态
+    setup             自动设置环境（推荐）
+    run <命令>         运行命令
+    convert           转换文档
+    help              显示帮助
 
 --------------------------------------------------------------------------------
 选项:
 --------------------------------------------------------------------------------
-    -f, --force              强制重新创建环境
-    -p, --python 版本        指定Python版本（默认: $PYTHON_VERSION）
-    -m, --mirror <镜像源>    指定pip镜像源
-                             可选值: default, tsinghua, aliyun, douban, custom
-                             - default:   使用官方 PyPI (默认)
-                             - tsinghua:  清华大学镜像
-                             - aliyun:    阿里云镜像
-                             - douban:    豆瓣镜像
-                             - custom:    使用CUSTOM_MIRROR环境变量指定的镜像
-    -h, --help               显示帮助信息
+    --env-type <类型>     环境类型:
+                        - auto:   自动选择（默认，优先 Conda）
+                        - conda:  强制使用 Conda
+                        - venv:   强制使用 venv
+    -m, --mirror <镜像>  pip 镜像源:
+                        - default:   官方 PyPI
+                        - tsinghua:  清华大学镜像
+                        - aliyun:    阿里云镜像（推荐）
+                        - douban:    豆瓣镜像
+                        - custom:    使用 CUSTOM_MIRROR 环境变量
 
 --------------------------------------------------------------------------------
 使用示例:
@@ -445,106 +474,56 @@ MarkItDown Environment Manager - 跨平台Conda环境管理器
     # 检查环境
     $0 check
 
-    # 列出所有环境
-    $0 list
-
-    # 完整设置环境（使用官方源）
+    # 自动设置环境（使用默认源）
     $0 setup
 
-    # 使用清华镜像设置（解决网络超时）
-    $0 setup --mirror tsinghua
-
-    # 使用阿里云镜像设置
+    # 使用阿里云镜像设置环境
     $0 setup --mirror aliyun
 
-    # 强制重新设置
-    $0 setup --force
+    # 强制使用 venv
+    $0 setup --env-type venv
 
-    # 创建自定义环境
-    $0 setup --force -p 3.11
-
-    # 在环境中运行命令
+    # 运行脚本
     $0 run python --version
 
     # 转换文档
-    $0 run python convert_document.py document.pdf
+    $0 convert input.pdf -o output/
 
 --------------------------------------------------------------------------------
-网络超时解决方案:
+环境要求:
 --------------------------------------------------------------------------------
-    如果遇到 pip install 超时问题，尝试以下方法：
-
-    1. 使用国内镜像源（命令行）:
-       $0 setup --mirror tsinghua
-       $0 setup --mirror aliyun
-       $0 setup --mirror douban
-
-    2. 使用国内镜像源（环境变量）:
-       export MARKITDOWN_PIP_MIRROR=tsinghua
-       $0 setup
-
-    3. 使用自定义镜像:
-       export MARKITDOWN_PIP_MIRROR=custom
-       export MARKITDOWN_CUSTOM_MIRROR="https://your-mirror.com/simple"
-       $0 setup
-
-    4. 调整超时和重试次数:
-       export MARKITDOWN_PIP_TIMEOUT=180
-       export MARKITDOWN_PIP_RETRIES=5
-       $0 setup
+    Python >= 3.11
+    可选: Conda (Miniconda/Anaconda)
+    网络: PyPI 或国内镜像
 
 --------------------------------------------------------------------------------
-环境变量:
+环境信息:
 --------------------------------------------------------------------------------
-    MARKITDOWN_ENV_NAME        覆盖默认环境名称（默认: $ENV_NAME）
-    MARKITDOWN_PYTHON_VER      覆盖默认Python版本（默认: $PYTHON_VERSION）
-    MARKITDOWN_PIP_MIRROR      指定pip镜像源（default/tsinghua/aliyun/douban/custom）
-    MARKITDOWN_CUSTOM_MIRROR   自定义镜像URL（当PIP_MIRROR=custom时）
-    MARKITDOWN_PIP_TIMEOUT     pip安装超时时间（默认: 120秒）
-    MARKITDOWN_PIP_RETRIES     pip重试次数（默认: 3次）
-
---------------------------------------------------------------------------------
-跨平台支持:
---------------------------------------------------------------------------------
-    Windows (Git Bash): 使用本脚本
-    Linux/macOS Bash:  使用本脚本
-
---------------------------------------------------------------------------------
-日志:
---------------------------------------------------------------------------------
-    日志文件: $LOG_FILE
+    Conda 环境: ~/.conda/envs/markitdown
+    Venv 目录:  $VENV_DIR
 
 ================================================================================
 
 EOF
 }
 
-# ============================================
-# 主函数
-# ============================================
-
 main() {
     local command="${1:-help}"
     shift || true
 
-    local force_flag="false"
-    local python_ver="$PYTHON_VERSION"
-    local target_env="${MARKITDOWN_ENV_NAME:-$ENV_NAME}"
     local mirror_type="$PIP_MIRROR"
+    local env_type="$ENV_TYPE"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -f|--force)
-                force_flag="true"
-                shift
-                ;;
-            -p|--python)
-                python_ver="$2"
-                shift 2
-                ;;
             -m|--mirror)
                 mirror_type="$2"
                 export MARKITDOWN_PIP_MIRROR="$mirror_type"
+                shift 2
+                ;;
+            --env-type)
+                env_type="$2"
+                export MARKITDOWN_ENV_TYPE="$env_type"
                 shift 2
                 ;;
             -h|--help)
@@ -558,60 +537,80 @@ main() {
     done
 
     echo ""
-    echo -e "\033[36mMarkItDown Environment Manager\033[0m"
-    echo -e "\033[36mPlatform: $SCRIPT_OS\033[0m"
+    echo -e "\033[36mMarkItDown 环境管理器\033[0m"
+    echo -e "\033[36m平台: $SCRIPT_OS\033[0m"
     echo ""
 
     case "$command" in
         check)
-            check_conda
-            ;;
-        list)
-            list_environments
-            ;;
-        exists)
-            local check_env="${1:-$target_env}"
-            if environment_exists "$check_env"; then
-                log_success "Environment '$check_env' exists"
-                exit 0
+            log_info "检测 Python 环境..."
+            if test_python_version; then
+                :
             else
-                log_warning "Environment '$check_env' not found"
-                exit 1
+                log_error "Python 版本不满足要求"
             fi
-            ;;
-        create)
-            local create_env="${1:-$target_env}"
-            create_environment "$create_env" "$python_ver" "$force_flag"
-            ;;
-        remove)
-            local remove_env="${1:-$target_env}"
-            remove_environment "$remove_env"
-            ;;
-        install)
-            local install_env="${1:-$target_env}"
-            install_markitdown "$install_env"
+
+            log_info ""
+            log_info "检测 Conda 环境..."
+            if test_conda_available; then
+                :
+            else
+                log_warning "Conda 不可用"
+            fi
+
+            log_info ""
+            log_info "检测本地环境..."
+            if python_exe=$(get_environment_python); then
+                log_success "已设置 Python: $python_exe"
+            else
+                log_warning "未设置环境，请运行 setup 命令"
+            fi
             ;;
         setup)
-            setup_environment "$force_flag"
-            local status=$?
-            if [ $status -eq 0 ]; then
-                get_activation_command
-            fi
-            exit $status
-            ;;
-        run)
-            if [ -z "${1:-}" ]; then
-                log_error "Please specify command to run"
-                show_help
+            export PIP_MIRROR="$mirror_type"
+            export ENV_TYPE="$env_type"
+            if setup_environment; then
+                log_info ""
+                log_success "环境设置完成！"
+                exit 0
+            else
+                log_error ""
+                log_error "环境设置失败"
                 exit 1
             fi
-            activate_and_run "$target_env" "$@"
+            ;;
+        run)
+            shift || true
+            run_command "$@"
+            ;;
+        convert)
+            local input_file=""
+            local output_dir="."
+
+            shift || true
+            while [[ $# -gt 0 ]]; do
+                case "$1" in
+                    -o|--output)
+                        output_dir="$2"
+                        shift 2
+                        ;;
+                    -*)
+                        shift
+                        ;;
+                    *)
+                        input_file="$1"
+                        shift
+                        ;;
+                esac
+            done
+
+            convert_document "$input_file" "$output_dir"
             ;;
         help|--help|-h)
             show_help
             ;;
         *)
-            log_error "Unknown command: $command"
+            log_error "未知命令: $command"
             show_help
             exit 1
             ;;
