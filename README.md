@@ -1,8 +1,8 @@
-# markdown_everything
+# markdown_everything.skill
 
 [![](https://img.shields.io/badge/skill-AI%20Agent%20Skill-purple.svg)]() [![](https://img.shields.io/badge/version-v0.0.1-blue.svg)]() [![](https://img.shields.io/badge/license-MIT-green.svg)]() [![](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]() [![](https://img.shields.io/badge/python-3.11%2B-yellow.svg)]() [![](https://img.shields.io/badge/AI%20Agents-Claude%20Code%20%7C%20Cursor%20%7C%20Trae%20%7C%20Solo%20%7C%20WorkBuddy%20%7C%20Qoder-orange.svg)]()
 
-文档格式转换工具，支持将 PDF、Word、Excel、PPT、图片等 20+ 种格式转换为 Markdown。
+文档格式转换工具，支持将 PDF、Word、Excel、PPT、图片等 20+ 种格式转换为 Markdown 格式，帮助 LLM 更好地理解和处理文档内容。
 
 ## 核心使用场景
 
@@ -19,13 +19,30 @@ LLM 在处理结构化文档时，直接读取 Markdown 比读取 docx、PDF 等
 | 待读取文档的完整路径 | 需要转换的源文件 | `C:\docs\report.docx` |
 | Markdown 保存路径 | 生成的 Markdown 文件存放位置 | `C:\output\report.md` |
 
+### 项目文件
+
+```
+markdown_everything/
+├── README.md
+├── skill.md
+└── scripts/
+    ├── manage_environment.ps1     # 环境管理器 (PowerShell)
+    ├── manage_environment.sh      # 环境管理器 (Bash)
+    ├── convert_document.py        # 核心转换引擎
+    ├── pdf_encoding_fixer.py      # PDF 编码修复模块
+    └── environment.log            # 操作日志
+```
+
 ### 实际应用情况
 
 已在以下平台验证可用：
 
+- **Claude Code** - 通过 MCP 工具或自定义工具调用
+- **Cursor** - Agent 模式下执行 shell 命令
 - **Trae** - 通过 skill 机制加载，支持直接调用
 - **Solo** - 通过 Shell 命令执行
 - **WorkBuddy** - 通过命令行接口调用
+- **Obsidian YOLO** - Obsidian 插件，可在笔记中调用本地 LLM
 
 ## 支持的文档格式
 
@@ -48,9 +65,24 @@ LLM 在处理结构化文档时，直接读取 Markdown 比读取 docx、PDF 等
 
 ### 前置要求
 
-- 已安装 Python 3.8+
+- 已安装 Python 3.11+
 - 已安装 markitdown 库（运行 `pip install markitdown`）
 - skill.md 文件（位于本项目根目录）
+
+### Claude Code / Claude CLI 部署步骤
+
+1. 在 Claude Code 配置目录创建 `~/.claude/commands/` 文件夹
+2. 将 skill.md 复制到该目录并命名为 `markdown.md`
+3. 重启 Claude Code
+4. 通过自然语言调用：`将 report.docx 转成 Markdown`
+
+### Cursor 部署步骤
+
+1. 打开 Cursor 设置
+2. 进入 Agent 配置页面
+3. 添加自定义命令或脚本路径
+4. 配置 markitdown 调用方式
+5. 重启 Cursor
 
 ### Trae 部署步骤
 
@@ -74,6 +106,13 @@ LLM 在处理结构化文档时，直接读取 Markdown 比读取 docx、PDF 等
 3. 选择导入自定义技能
 4. 上传 skill.md 文件
 5. 确认导入成功
+
+### Obsidian YOLO 部署步骤
+
+1. 在 Obsidian 中安装 YOLO 插件
+2. 配置本地 LLM 连接
+3. 将 skill.md 内容添加到 YOLO 的自定义提示中
+4. 在笔记中直接调用：`将当前文档转为 Markdown`
 
 ### 验证部署
 
@@ -104,63 +143,55 @@ LLM 在处理结构化文档时，直接读取 Markdown 比读取 docx、PDF 等
 
 ## 核心功能
 
-### PDF 中文编码自动修复
+### 解决 LLM 读取文档的痛点
 
-处理中文 PDF 时，这个工具从 Unicode 级别提取文本，直接读取 PDF 字符对象，绕过常见的编码问题。
+当 AI Agent 需要处理 PDF、DOCX、XLSX 等文档时，往往遇到格式识别不准、表格结构丢失、图片内容无法理解等问题。这个 skill 把文档转成纯文本 Markdown，让 LLM 直接读文本，避免解析二进制格式的各种坑。
 
-```python
-chars = page.chars
-for char in chars:
-    char_unicode = char.get('unicode', '')
-```
+工作流程很简单：
 
-转换时会显示中文比例和乱码率。Unicode 提取失败时，自动回退到标准方式。
+1. 用户提供文档路径
+2. Skill 调用 markitdown 转成 Markdown
+3. LLM 直接读取 Markdown 纯文本
+4. 输出结构清晰的结果
 
-### 跨平台支持
+### 支持的格式
+
+- PDF、DOCX、XLSX、PPTX、EPUB 等常见格式
+- 自动提取标题层级、表格、代码块、图片
+- 图片支持 OCR 文字识别
+- 中文 PDF 自动修复编码问题
+
+### 技术细节
+
+- 使用 markitdown 作为转换引擎
+- 支持中文 PDF Unicode 级别提取
+- 自动处理多编码混合文本
+- 保留文档结构（标题、列表、表格）
+
+### 跨平台脚本
 
 | 操作系统 | 脚本 |
 |----------|------|
-| Windows 10/11 | PowerShell: `manage_environment.ps1` |
-| Linux (Ubuntu/CentOS) | Bash: `manage_environment.sh` |
-| macOS | Bash: `manage_environment.sh` |
+| Windows | PowerShell: `manage_environment.ps1` |
+| Linux/macOS | Bash: `manage_environment.sh` |
 
-脚本自动检测 Conda 环境。Conda 不可用时，切换到 pip 安装。
+脚本自动检测 Conda 环境，不行就切 pip。
 
-### pip Fallback 机制
-
-脚本按以下顺序尝试：
-
-1. 检查 Conda 是否可用
-2. Conda 可用时使用 Conda 环境
-3. Conda 不可用时使用 pip
-4. 支持强制 pip 模式
-
-```powershell
-.\manage_environment.ps1 -Command setup -UsePip
-```
-
-## AI Agent 集成示例
+## 调用示例
 
 ### Claude Code
 
-```json
-{
-  "name": "convert_to_markdown",
-  "description": "将文档转换为 Markdown",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "input_file": { "type": "string", "description": "待转换的文档路径" },
-      "output_dir": { "type": "string", "description": "输出目录路径" }
-    },
-    "required": ["input_file"]
-  }
-}
+在 Claude Code 中可以直接说：
+
+```
+把 report.docx 转成 Markdown 保存到桌面
 ```
 
-### Trae
+### Cursor
 
-```bash
+Cursor Agent 模式下调用：
+
+```
 ./manage_environment.sh convert -i document.pdf -o output/
 ```
 
@@ -208,20 +239,6 @@ $env:Path += ";D:\anaconda;D:\anaconda\Scripts"
 
 ```powershell
 Test-Path "C:\input\document.pdf"
-```
-
-## 文件结构
-
-```
-markdown_everything/
-├── README.md
-├── skill.md
-└── scripts/
-    ├── manage_environment.ps1     # 环境管理器 (PowerShell)
-    ├── manage_environment.sh      # 环境管理器 (Bash)
-    ├── convert_document.py        # 核心转换引擎
-    ├── pdf_encoding_fixer.py      # PDF 编码修复模块
-    └── environment.log            # 操作日志
 ```
 
 ## 版本信息
