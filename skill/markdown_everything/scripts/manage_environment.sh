@@ -9,6 +9,11 @@ ENV_NAME="${MARKITDOWN_ENV_NAME:-markitdown}"
 PYTHON_VERSION="${MARKITDOWN_PYTHON_VER:-3.12}"
 LOG_FILE="${SCRIPT_DIR}/environment.log"
 
+PIP_TIMEOUT="${MARKITDOWN_PIP_TIMEOUT:-120}"
+PIP_RETRIES="${MARKITDOWN_PIP_RETRIES:-3}"
+PIP_MIRROR="${MARKITDOWN_PIP_MIRROR:-default}"
+CUSTOM_MIRROR="${MARKITDOWN_CUSTOM_MIRROR:-}"
+
 # ============================================
 # 跨平台配置和检测
 # ============================================
@@ -75,6 +80,84 @@ log_error() {
 # ============================================
 # 跨平台工具函数
 # ============================================
+
+get_pip_mirror_index() {
+    local mirror_type="$1"
+    local custom_index="$2"
+
+    case "$mirror_type" in
+        tsinghua)
+            echo "https://pypi.tuna.tsinghua.edu.cn/simple"
+            ;;
+        aliyun)
+            echo "https://mirrors.aliyun.com/pypi/simple/"
+            ;;
+        douban)
+            echo "https://pypi.doubanio.com/simple/"
+            ;;
+        custom)
+            echo "$custom_index"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+get_pip_install_options() {
+    local mirror_type="$1"
+    local custom_index="$2"
+    local options=()
+
+    options+=("--no-cache-dir" "--retries" "$PIP_RETRIES" "--timeout" "$PIP_TIMEOUT")
+
+    local mirror_index
+    mirror_index=$(get_pip_mirror_index "$mirror_type" "$custom_index")
+
+    if [[ -n "$mirror_index" ]]; then
+        options+=("-i" "$mirror_index")
+        local trusted_host
+        trusted_host=$(echo "$mirror_index" | sed -E 's|https?://||' | sed -E 's|/simple.*$||')
+        options+=("--trusted-host" "$trusted_host")
+    fi
+
+    echo "${options[@]}"
+}
+
+install_with_retry() {
+    local pip_cmd="$1"
+    shift
+    local install_args=("$@")
+
+    local attempt=0
+    local success=false
+
+    while [[ $attempt -lt $PIP_RETRIES && "$success" == "false" ]]; do
+        ((attempt++))
+
+        if [[ $attempt -gt 1 ]]; then
+            local wait_time=$((2 ** (attempt - 1)))
+            log_warning "Retry attempt $attempt/$PIP_RETRIES, waiting $wait_time seconds..."
+            sleep "$wait_time"
+        else
+            log_info "Attempt $attempt/$PIP_RETRIES..."
+        fi
+
+        if "$pip_cmd" install "${install_args[@]}" 2>&1 | tee -a "$LOG_FILE"; then
+            success=true
+        else
+            log_warning "Attempt $attempt failed with exit code $?"
+        fi
+    done
+
+    if [[ "$success" == "true" ]]; then
+        return 0
+    else
+        log_error "Failed to install after $attempt attempts"
+        log_info "Try using a different mirror: --mirror tsinghua|aliyun|douban"
+        return 1
+    fi
+}
 
 check_conda_cmd() {
     if command -v conda &> /dev/null; then
@@ -228,11 +311,16 @@ install_markitdown() {
     fi
 
     log_info "Installing markitdown with all optional dependencies in '$env_name'..."
+    log_info "Mirror: $PIP_MIRROR"
+
+    local pip_options
+    pip_options=$(get_pip_install_options "$PIP_MIRROR" "$CUSTOM_MIRROR")
+    read -ra pip_options_array <<< "$pip_options"
 
     local python_exe
     if python_exe=$(get_python_exe "$env_name"); then
         log_info "Using Python: $python_exe"
-        if "$python_exe" -m pip install 'markitdown[all]' 2>&1 | tee -a "$LOG_FILE"; then
+        if install_with_retry "$python_exe -m pip" install 'markitdown[all]' "${pip_options_array[@]}"; then
             log_success "Markitdown installed successfully in '$env_name'"
             return 0
         else
@@ -241,7 +329,7 @@ install_markitdown() {
         fi
     else
         log_info "Python not found in expected path, using conda run"
-        if conda run -n "$env_name" pip install 'markitdown[all]' 2>&1 | tee -a "$LOG_FILE"; then
+        if install_with_retry conda run -n "$env_name" pip install 'markitdown[all]' "${pip_options_array[@]}"; then
             log_success "Markitdown installed successfully in '$env_name'"
             return 0
         else
@@ -340,9 +428,16 @@ MarkItDown Environment Manager - 跨平台Conda环境管理器
 --------------------------------------------------------------------------------
 选项:
 --------------------------------------------------------------------------------
-    -f, --force         强制重新创建环境
-    -p, --python 版本   指定Python版本（默认: $PYTHON_VERSION）
-    -h, --help          显示帮助信息
+    -f, --force              强制重新创建环境
+    -p, --python 版本        指定Python版本（默认: $PYTHON_VERSION）
+    -m, --mirror <镜像源>    指定pip镜像源
+                             可选值: default, tsinghua, aliyun, douban, custom
+                             - default:   使用官方 PyPI (默认)
+                             - tsinghua:  清华大学镜像
+                             - aliyun:    阿里云镜像
+                             - douban:    豆瓣镜像
+                             - custom:    使用CUSTOM_MIRROR环境变量指定的镜像
+    -h, --help               显示帮助信息
 
 --------------------------------------------------------------------------------
 使用示例:
@@ -353,8 +448,14 @@ MarkItDown Environment Manager - 跨平台Conda环境管理器
     # 列出所有环境
     $0 list
 
-    # 完整设置环境
+    # 完整设置环境（使用官方源）
     $0 setup
+
+    # 使用清华镜像设置（解决网络超时）
+    $0 setup --mirror tsinghua
+
+    # 使用阿里云镜像设置
+    $0 setup --mirror aliyun
 
     # 强制重新设置
     $0 setup --force
@@ -369,10 +470,38 @@ MarkItDown Environment Manager - 跨平台Conda环境管理器
     $0 run python convert_document.py document.pdf
 
 --------------------------------------------------------------------------------
+网络超时解决方案:
+--------------------------------------------------------------------------------
+    如果遇到 pip install 超时问题，尝试以下方法：
+
+    1. 使用国内镜像源（命令行）:
+       $0 setup --mirror tsinghua
+       $0 setup --mirror aliyun
+       $0 setup --mirror douban
+
+    2. 使用国内镜像源（环境变量）:
+       export MARKITDOWN_PIP_MIRROR=tsinghua
+       $0 setup
+
+    3. 使用自定义镜像:
+       export MARKITDOWN_PIP_MIRROR=custom
+       export MARKITDOWN_CUSTOM_MIRROR="https://your-mirror.com/simple"
+       $0 setup
+
+    4. 调整超时和重试次数:
+       export MARKITDOWN_PIP_TIMEOUT=180
+       export MARKITDOWN_PIP_RETRIES=5
+       $0 setup
+
+--------------------------------------------------------------------------------
 环境变量:
 --------------------------------------------------------------------------------
-    MARKITDOWN_ENV_NAME    覆盖默认环境名称（默认: $ENV_NAME）
-    MARKITDOWN_PYTHON_VER 覆盖默认Python版本（默认: $PYTHON_VERSION）
+    MARKITDOWN_ENV_NAME        覆盖默认环境名称（默认: $ENV_NAME）
+    MARKITDOWN_PYTHON_VER      覆盖默认Python版本（默认: $PYTHON_VERSION）
+    MARKITDOWN_PIP_MIRROR      指定pip镜像源（default/tsinghua/aliyun/douban/custom）
+    MARKITDOWN_CUSTOM_MIRROR   自定义镜像URL（当PIP_MIRROR=custom时）
+    MARKITDOWN_PIP_TIMEOUT     pip安装超时时间（默认: 120秒）
+    MARKITDOWN_PIP_RETRIES     pip重试次数（默认: 3次）
 
 --------------------------------------------------------------------------------
 跨平台支持:
@@ -401,6 +530,7 @@ main() {
     local force_flag="false"
     local python_ver="$PYTHON_VERSION"
     local target_env="${MARKITDOWN_ENV_NAME:-$ENV_NAME}"
+    local mirror_type="$PIP_MIRROR"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -410,6 +540,11 @@ main() {
                 ;;
             -p|--python)
                 python_ver="$2"
+                shift 2
+                ;;
+            -m|--mirror)
+                mirror_type="$2"
+                export MARKITDOWN_PIP_MIRROR="$mirror_type"
                 shift 2
                 ;;
             -h|--help)

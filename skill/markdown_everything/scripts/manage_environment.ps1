@@ -20,6 +20,13 @@ param(
     [switch]$UsePip,
 
     [Parameter(Mandatory=$false)]
+    [ValidateSet("default", "tsinghua", "aliyun", "douban", "custom")]
+    [string]$Mirror = "default",
+
+    [Parameter(Mandatory=$false)]
+    [string]$CustomMirror,
+
+    [Parameter(Mandatory=$false)]
     [string[]]$RunCommand,
 
     [Parameter(Mandatory=$false)]
@@ -32,6 +39,10 @@ param(
 $ErrorActionPreference = "Continue"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $ScriptDir "environment.log"
+
+$script:PipTimeout = 120
+$script:PipRetries = 3
+$script:DefaultPipMirror = $null
 
 # ============================================
 # 跨平台配置和检测
@@ -205,22 +216,133 @@ function Test-PipAvailable {
     }
 }
 
+function Get-PipMirrorIndex {
+    param([string]$MirrorType, [string]$CustomIndex)
+
+    switch ($MirrorType) {
+        "tsinghua" {
+            return "https://pypi.tuna.tsinghua.edu.cn/simple"
+        }
+        "aliyun" {
+            return "https://mirrors.aliyun.com/pypi/simple/"
+        }
+        "douban" {
+            return "https://pypi.doubanio.com/simple/"
+        }
+        "custom" {
+            return $CustomIndex
+        }
+        default {
+            return $null
+        }
+    }
+}
+
+function Get-PipInstallOptions {
+    param([string]$MirrorType, [string]$CustomIndex)
+
+    $options = @("--no-cache-dir", "--retries", $script:PipRetries, "--timeout", $script:PipTimeout)
+
+    $mirrorIndex = Get-PipMirrorIndex -MirrorType $MirrorType -CustomIndex $CustomIndex
+    if ($mirrorIndex) {
+        $options += @("-i", $mirrorIndex)
+        $trustedHost = $mirrorIndex -replace 'https?://', '' -replace '/simple.*$', ''
+        $options += @("--trusted-host", $trustedHost)
+    }
+
+    return $options
+}
+
 function Install-MarkitdownWithPip {
     Write-Log "Installing markitdown with all optional dependencies using pip..." "INFO"
+    Write-Log "Mirror: $Mirror" "INFO"
 
-    try {
-        python -m pip install 'markitdown[all]' 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
-            Write-Log "Markitdown installed successfully using pip" "SUCCESS"
-            return $true
+    $pipOptions = Get-PipInstallOptions -MirrorType $Mirror -CustomIndex $CustomMirror
+    $installCmd = @("python", "-m", "pip", "install", 'markitdown[all]') + $pipOptions
+
+    $attempt = 0
+    $success = $false
+
+    while ($attempt -lt $script:PipRetries -and -not $success) {
+        $attempt++
+        if ($attempt -gt 1) {
+            $waitTime = [math]::Pow(2, $attempt - 1)
+            Write-Log "Retry attempt $attempt/$($script:PipRetries), waiting $waitTime seconds..." "WARNING"
+            Start-Sleep -Seconds $waitTime
         } else {
-            Write-Log "Failed to install markitdown using pip" "ERROR"
-            return $false
+            Write-Log "Attempt $attempt/$($script:PipRetries)..." "INFO"
         }
-    } catch {
-        Write-Log "Failed to install markitdown using pip: $_" "ERROR"
+
+        try {
+            $output = & @pipOptions[0] @pipOptions[1..($pipOptions.Length)] install 'markitdown[all]' 2>&1
+            if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
+                Write-Log "Markitdown installed successfully using pip" "SUCCESS"
+                $success = $true
+            } else {
+                Write-Log "Attempt $attempt failed with exit code $LASTEXITCODE" "WARNING"
+            }
+        } catch {
+            Write-Log "Attempt $attempt failed: $_" "WARNING"
+        }
+    }
+
+    if (-not $success) {
+        Write-Log "Failed to install markitdown using pip after $attempt attempts" "ERROR"
+        Write-Log "Try using a different mirror: -Mirror tsinghua|aliyun|douban" "INFO"
         return $false
     }
+
+    return $true
+}
+
+function Invoke-PipInstallWithRetry {
+    param(
+        [string]$PythonExe,
+        [string]$MirrorType,
+        [string]$CustomIndex
+    )
+
+    $pipOptions = Get-PipInstallOptions -MirrorType $MirrorType -CustomIndex $CustomIndex
+    $installCmd = @($PythonExe, "-m", "pip", "install", 'markitdown[all]') + $pipOptions
+
+    $attempt = 0
+    $success = $false
+
+    while ($attempt -lt $script:PipRetries -and -not $success) {
+        $attempt++
+        if ($attempt -gt 1) {
+            $waitTime = [math]::Pow(2, $attempt - 1)
+            Write-Log "Retry attempt $attempt/$($script:PipRetries), waiting $waitTime seconds..." "WARNING"
+            Start-Sleep -Seconds $waitTime
+        } else {
+            Write-Log "Attempt $attempt/$($script:PipRetries)..." "INFO"
+        }
+
+        try {
+            if ($attempt -eq 1) {
+                & $PythonExe -m pip install 'markitdown[all]' @pipOptions 2>&1 | Out-Null
+            } else {
+                & $PythonExe -m pip install 'markitdown[all]' @pipOptions 2>&1 | Out-Null
+            }
+
+            if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
+                Write-Log "Markitdown installed successfully" "SUCCESS"
+                $success = $true
+            } else {
+                Write-Log "Attempt $attempt failed with exit code $LASTEXITCODE" "WARNING"
+            }
+        } catch {
+            Write-Log "Attempt $attempt failed: $_" "WARNING"
+        }
+    }
+
+    if (-not $success) {
+        Write-Log "Failed to install markitdown after $attempt attempts" "ERROR"
+        Write-Log "Try using a different mirror: -Mirror tsinghua|aliyun|douban" "INFO"
+        return $false
+    }
+
+    return $true
 }
 
 function Invoke-PythonRun {
@@ -407,22 +529,71 @@ function Install-Markitdown {
     }
 
     Write-Log "Installing markitdown with all optional dependencies in '$EnvName'..." "INFO"
+    Write-Log "Mirror: $Mirror" "INFO"
 
     $pythonExe = Get-PythonExePath -EnvName $EnvName
+    $pipOptions = Get-PipInstallOptions -MirrorType $Mirror -CustomIndex $CustomMirror
 
     try {
         if ($pythonExe -and (Test-PathCrossPlatform $pythonExe)) {
             Write-Log "Using Python: $pythonExe" "INFO"
-            & $pythonExe -m pip install 'markitdown[all]' 2>&1 | Out-Null
+            $attempt = 0
+            $success = $false
+
+            while ($attempt -lt $script:PipRetries -and -not $success) {
+                $attempt++
+                if ($attempt -gt 1) {
+                    $waitTime = [math]::Pow(2, $attempt - 1)
+                    Write-Log "Retry attempt $attempt/$($script:PipRetries), waiting $waitTime seconds..." "WARNING"
+                    Start-Sleep -Seconds $waitTime
+                }
+
+                & $pythonExe -m pip install 'markitdown[all]' @pipOptions 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
+                    Write-Log "Markitdown installed successfully in '$EnvName'" "SUCCESS"
+                    $success = $true
+                } else {
+                    Write-Log "Attempt $attempt failed with exit code $LASTEXITCODE" "WARNING"
+                }
+            }
+
+            if (-not $success) {
+                Write-Log "Failed to install markitdown after $attempt attempts" "ERROR"
+                Write-Log "Try using a different mirror: -Mirror tsinghua|aliyun|douban" "INFO"
+                return $false
+            }
         } else {
             Write-Log "Python not found in expected path, using conda run" "INFO"
-            conda run -n $EnvName $script:PipExeName install 'markitdown[all]' 2>&1 | Out-Null
+            $attempt = 0
+            $success = $false
+
+            while ($attempt -lt $script:PipRetries -and -not $success) {
+                $attempt++
+                if ($attempt -gt 1) {
+                    $waitTime = [math]::Pow(2, $attempt - 1)
+                    Write-Log "Retry attempt $attempt/$($script:PipRetries), waiting $waitTime seconds..." "WARNING"
+                    Start-Sleep -Seconds $waitTime
+                }
+
+                conda run -n $EnvName $script:PipExeName install 'markitdown[all]' @pipOptions 2>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
+                    Write-Log "Markitdown installed successfully in '$EnvName'" "SUCCESS"
+                    $success = $true
+                } else {
+                    Write-Log "Attempt $attempt failed with exit code $LASTEXITCODE" "WARNING"
+                }
+            }
+
+            if (-not $success) {
+                Write-Log "Failed to install markitdown after $attempt attempts" "ERROR"
+                return $false
+            }
         }
 
-        Write-Log "Markitdown installed successfully in '$EnvName'" "SUCCESS"
         return $true
     } catch {
         Write-Log "Failed to install markitdown: $_" "ERROR"
+        Write-Log "Try using a different mirror: -Mirror tsinghua|aliyun|douban" "INFO"
         return $false
     }
 }
@@ -512,6 +683,14 @@ MarkItDown Environment Manager - 跨平台Conda环境管理器
     -EnvironmentName <名称>    指定环境名称（默认: markitdown）
     -PythonVersion <版本>     指定Python版本（默认: 3.12）
     -Force                    强制重新创建环境
+    -Mirror <镜像源>          指定pip镜像源
+                              可选值: default, tsinghua, aliyun, douban, custom
+                              - default:   使用官方 PyPI (默认)
+                              - tsinghua:  清华大学镜像
+                              - aliyun:    阿里云镜像
+                              - douban:    豆瓣镜像
+                              - custom:    使用-CustomMirror指定的镜像
+    -CustomMirror <URL>      当-Mirror为custom时，指定自定义镜像URL
 
 --------------------------------------------------------------------------------
 使用示例:
@@ -522,8 +701,14 @@ MarkItDown Environment Manager - 跨平台Conda环境管理器
     # 列出所有环境
     .\manage_environment.ps1 -Command list
 
-    # 完整设置环境
+    # 完整设置环境（使用官方源）
     .\manage_environment.ps1 -Command setup
+
+    # 使用清华镜像设置（解决网络超时）
+    .\manage_environment.ps1 -Command setup -Mirror tsinghua
+
+    # 使用阿里云镜像设置
+    .\manage_environment.ps1 -Command setup -Mirror aliyun
 
     # 强制重新设置
     .\manage_environment.ps1 -Command setup -Force
@@ -536,6 +721,22 @@ MarkItDown Environment Manager - 跨平台Conda环境管理器
 
     # 转换文档
     .\manage_environment.ps1 -Command run -RunCommand @("python", "convert_document.py", "document.pdf")
+
+--------------------------------------------------------------------------------
+网络超时解决方案:
+--------------------------------------------------------------------------------
+    如果遇到 pip install 超时问题，尝试以下方法：
+
+    1. 使用国内镜像源（推荐）:
+       .\manage_environment.ps1 -Command setup -Mirror tsinghua
+       .\manage_environment.ps1 -Command setup -Mirror aliyun
+       .\manage_environment.ps1 -Command setup -Mirror douban
+
+    2. 使用自定义镜像:
+       .\manage_environment.ps1 -Command setup -Mirror custom -CustomMirror "https://your-mirror.com/simple"
+
+    3. 增加超时时间（默认120秒）:
+       修改脚本中的 $script:PipTimeout 值
 
 --------------------------------------------------------------------------------
 环境变量:
