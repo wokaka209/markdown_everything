@@ -1,15 +1,11 @@
 # MarkItDown Environment Manager
-# 智能环境管理器 - 自动检测并设置 Python/Conda 环境
-# 流程: Python检测 -> Conda检测 -> 虚拟环境创建 -> 依赖安装
+# 智能环境管理器 - 仅 Conda 环境检测与自动创建
+# 流程: Conda检测 -> 环境检测 -> 自动创建 -> 依赖安装
 
 param(
     [Parameter(Mandatory=$false)]
     [ValidateSet("check", "setup", "run", "convert", "help")]
     [string]$Command = "help",
-
-    [Parameter(Mandatory=$false)]
-    [ValidateSet("conda", "venv", "auto")]
-    [string]$EnvironmentType = "auto",
 
     [Parameter(Mandatory=$false)]
     [ValidateSet("default", "tsinghua", "aliyun", "douban", "custom")]
@@ -31,10 +27,10 @@ param(
 $ErrorActionPreference = "Continue"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $ScriptDir "environment.log"
-$VenvDir = Join-Path $ScriptDir ".venv"
 
 $script:PipTimeout = 120
 $script:PipRetries = 3
+$script:EnvName = "markitdown"
 
 $script:IsWindows = $PSVersionTable.Platform -eq 'Win32NT' -or $null -eq $PSVersionTable.Platform
 $script:IsLinux = $PSVersionTable.Platform -eq 'Unix' -and (Test-Path "/proc/version")
@@ -88,77 +84,50 @@ function Get-OperatingSystem {
     else { return "Unknown" }
 }
 
-function Test-PythonVersion {
-    try {
-        $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
-        if (-not $pythonCmd) {
-            return $null
-        }
+function Test-CondaInstalled {
+    Write-Log "======================================" "INFO"
+    Write-Log "步骤 1: 检测 Conda 是否安装" "INFO"
+    Write-Log "======================================" "INFO"
 
-        $versionOutput = python --version 2>&1
-        if ($versionOutput -match 'Python (\d+)\.(\d+)\.(\d+)') {
-            $major = [int]$Matches[1]
-            $minor = [int]$Matches[2]
-            $patch = [int]$Matches[3]
-
-            $fullVersion = "$major.$minor.$patch"
-
-            if ($major -gt 3 -or ($major -eq 3 -and $minor -gt 11)) {
-                Write-Log "Python 版本: $fullVersion (满足要求 >= 3.11)" "SUCCESS"
-                return @{
-                    Available = $true
-                    Version = $fullVersion
-                    Major = $major
-                    Minor = $minor
-                    Patch = $patch
-                }
-            } elseif ($major -eq 3 -and $minor -eq 11) {
-                Write-Log "Python 版本: $fullVersion (满足要求 >= 3.11)" "SUCCESS"
-                return @{
-                    Available = $true
-                    Version = $fullVersion
-                    Major = $major
-                    Minor = $minor
-                    Patch = $patch
-                }
-            } else {
-                Write-Log "Python 版本过低: $fullVersion (需要 >= 3.11)" "ERROR"
-                return @{
-                    Available = $true
-                    Version = $fullVersion
-                    MeetsRequirement = $false
-                }
-            }
-        }
-    } catch {
-    }
-
-    return $null
-}
-
-function Test-CondaAvailable {
     try {
         $condaCmd = Get-Command conda -ErrorAction SilentlyContinue
-        if (-not $condaCmd) {
-            foreach ($basePath in $script:DefaultCondaPaths) {
-                $condaPath = Join-Path $basePath "condabin" "conda.bat"
-                if ($script:IsWindows) {
-                    $condaPath = Join-Path $basePath "conda.bat"
-                }
-
-                if (Test-Path $condaPath) {
-                    $version = & $condaPath --version 2>&1
-                    Write-Log "找到 Conda: $version" "SUCCESS"
-                    return $condaPath
-                }
-            }
-            return $null
+        if ($condaCmd) {
+            $version = conda --version 2>&1
+            Write-Log "Conda 已安装: $version" "SUCCESS"
+            return $condaCmd.Source
         }
 
-        $version = conda --version 2>&1
-        Write-Log "找到 Conda: $version" "SUCCESS"
-        return $condaCmd.Source
+        foreach ($basePath in $script:DefaultCondaPaths) {
+            $condaBatPath = Join-Path $basePath "condabin" "conda.bat"
+            $condaExePath = Join-Path $basePath "Scripts" "conda.exe"
+
+            if ($script:IsWindows) {
+                if (Test-Path $condaBatPath) {
+                    $version = & $condaBatPath --version 2>&1
+                    Write-Log "Conda 已安装: $version (路径: $basePath)" "SUCCESS"
+                    return $condaBatPath
+                }
+                if (Test-Path $condaExePath) {
+                    $version = & $condaExePath --version 2>&1
+                    Write-Log "Conda 已安装: $version (路径: $basePath)" "SUCCESS"
+                    return $condaExePath
+                }
+            } else {
+                $condaBinPath = Join-Path $basePath "bin" "conda"
+                if (Test-Path $condaBinPath) {
+                    $version = & $condaBinPath --version 2>&1
+                    Write-Log "Conda 已安装: $version (路径: $basePath)" "SUCCESS"
+                    return $condaBinPath
+                }
+            }
+        }
+
+        Write-Log "系统未安装 Conda" "ERROR"
+        Write-Log "请先安装 Miniconda 或 Anaconda" "INFO"
+        Write-Log "下载链接: https://docs.conda.io/en/latest/miniconda.html" "INFO"
+        return $null
     } catch {
+        Write-Log "Conda 检测失败: $_" "ERROR"
         return $null
     }
 }
@@ -166,16 +135,58 @@ function Test-CondaAvailable {
 function Test-CondaEnvironmentExists {
     param([string]$EnvName)
 
+    Write-Log "检测 Conda 环境 '$EnvName'..." "INFO"
+
     try {
+        $condaPath = Test-CondaInstalled
+        if (-not $condaPath) {
+            Write-Log "Conda 未安装，无法检测环境" "ERROR"
+            return $false
+        }
+
         $envList = conda env list 2>&1 | Out-String
-        $pattern = "(^|\s)${EnvName}(\s|$)"
-        if ($envList -imatch $pattern) {
+        if ($envList -imatch "(^|\s)${EnvName}(\s|$)") {
+            Write-Log "Conda 环境 '$EnvName' 已存在 ✓" "SUCCESS"
             return $true
+        } else {
+            Write-Log "Conda 环境 '$EnvName' 不存在，将自动创建" "INFO"
+            return $false
         }
     } catch {
+        Write-Log "环境检测失败: $_" "ERROR"
+        return $false
     }
+}
 
-    return $false
+function New-CondaEnvironment {
+    param([string]$EnvName)
+
+    Write-Log "======================================" "INFO"
+    Write-Log "步骤 2: 自动创建 Conda 环境" "INFO"
+    Write-Log "======================================" "INFO"
+
+    try {
+        $condaPath = Test-CondaInstalled
+        if (-not $condaPath) {
+            Write-Log "无法创建环境: Conda 未安装" "ERROR"
+            return $false
+        }
+
+        Write-Log "正在创建 Conda 环境 '$EnvName' (python=3.11)..." "INFO"
+        $output = conda create -n $EnvName python=3.11 -y 2>&1
+        $outputStr = $output | Out-String
+
+        if ($LASTEXITCODE -eq 0 -or $outputStr -match "To activate this environment") {
+            Write-Log "Conda 环境 '$EnvName' 创建成功 ✓" "SUCCESS"
+            return $true
+        } else {
+            Write-Log "Conda 环境创建失败: $outputStr" "ERROR"
+            return $false
+        }
+    } catch {
+        Write-Log "Conda 环境创建失败: $_" "ERROR"
+        return $false
+    }
 }
 
 function Get-PythonExePath {
@@ -194,14 +205,6 @@ function Get-PythonExePath {
     }
 
     return $null
-}
-
-function Get-VenvPythonExe {
-    if ($script:IsWindows) {
-        return Join-Path $VenvDir "Scripts" "python.exe"
-    } else {
-        return Join-Path $VenvDir "bin" "python"
-    }
 }
 
 function Get-PipMirrorIndex {
@@ -224,11 +227,14 @@ function Install-Package {
         [string]$CustomMirror
     )
 
+    Write-Log "======================================" "INFO"
+    Write-Log "步骤 3: 安装依赖包" "INFO"
+    Write-Log "======================================" "INFO"
     Write-Log "安装 $Package..." "INFO"
     Write-Log "使用镜像: $MirrorType" "INFO"
 
     $mirrorIndex = Get-PipMirrorIndex -MirrorType $MirrorType -CustomIndex $CustomMirror
-    $installArgs = @("-m", "pip", "install", "--no-cache-dir", $Package)
+    $installArgs = @("-m", "pip", "install", "--no-cache-dir", "--timeout", $script:PipTimeout, $Package)
 
     if ($mirrorIndex) {
         $trustedHost = $mirrorIndex -replace 'https?://', '' -replace '/simple.*$', ''
@@ -247,9 +253,10 @@ function Install-Package {
         }
 
         try {
+            Write-Log "安装尝试 $attempt..." "INFO"
             & $PythonExe @installArgs 2>&1 | Out-Null
             if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
-                Write-Log "$Package 安装成功" "SUCCESS"
+                Write-Log "$Package 安装成功 ✓" "SUCCESS"
                 $success = $true
             } else {
                 Write-Log "安装尝试 $attempt 失败" "WARNING"
@@ -267,172 +274,57 @@ function Install-Package {
     return $true
 }
 
-function New-VenvEnvironment {
-    param([string]$PythonExe)
+function Setup-Environment {
+    $envName = $script:EnvName
+    $condaPath = Test-CondaInstalled
 
-    Write-Log "创建虚拟环境..." "INFO"
-
-    if (Test-Path $VenvDir) {
-        Write-Log "虚拟环境已存在: $VenvDir" "INFO"
-        return $true
-    }
-
-    try {
-        & $PythonExe -m venv $VenvDir 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
-            Write-Log "虚拟环境创建成功: $VenvDir" "SUCCESS"
-            return $true
-        } else {
-            Write-Log "虚拟环境创建失败" "ERROR"
-            return $false
-        }
-    } catch {
-        Write-Log "虚拟环境创建失败: $_" "ERROR"
-        return $false
-    }
-}
-
-function Setup-WithConda {
-    $condaPath = Test-CondaAvailable
     if (-not $condaPath) {
+        Write-Log "Conda 未安装，无法继续" "ERROR"
         return $false
     }
 
-    $envName = "markitdown"
+    Write-Log "======================================" "INFO"
+    Write-Log "环境设置开始" "INFO"
+    Write-Log "目标环境: $envName" "INFO"
+    Write-Log "======================================" "INFO"
+
     $envExists = Test-CondaEnvironmentExists -EnvName $envName
 
     if ($envExists) {
-        Write-Log "Conda 环境 '$envName' 已存在" "INFO"
+        Write-Log "使用现有 Conda 环境" "INFO"
         $pythonExe = Get-PythonExePath -EnvName $envName
         if ($pythonExe) {
             if (Install-Package -PythonExe $pythonExe -Package 'markitdown[all]' -MirrorType $Mirror -CustomMirror $CustomMirror) {
-                Write-Log "Conda 环境设置完成" "SUCCESS"
+                Write-Log "依赖安装完成 ✓" "SUCCESS"
                 return $true
             }
         }
     } else {
-        Write-Log "创建 Conda 环境..." "INFO"
-        try {
-            conda create -n $envName python=3.11 -y 2>&1 | Out-Null
-            if ($LASTEXITCODE -eq 0 -or $null -eq $LASTEXITCODE) {
-                Write-Log "Conda 环境创建成功" "SUCCESS"
-                $pythonExe = Get-PythonExePath -EnvName $envName
-                if ($pythonExe) {
-                    if (Install-Package -PythonExe $pythonExe -Package 'markitdown[all]' -MirrorType $Mirror -CustomMirror $CustomMirror) {
-                        Write-Log "Conda 环境设置完成" "SUCCESS"
-                        return $true
-                    }
+        if (New-CondaEnvironment -EnvName $envName) {
+            $pythonExe = Get-PythonExePath -EnvName $envName
+            if ($pythonExe) {
+                if (Install-Package -PythonExe $pythonExe -Package 'markitdown[all]' -MirrorType $Mirror -CustomMirror $CustomMirror) {
+                    Write-Log "环境设置完成 ✓" "SUCCESS"
+                    return $true
                 }
             }
-        } catch {
-            Write-Log "Conda 环境创建失败: $_" "ERROR"
         }
-    }
-
-    return $false
-}
-
-function Setup-WithVenv {
-    $pythonInfo = Test-PythonVersion
-    if (-not $pythonInfo -or -not $pythonInfo.Available) {
-        Write-Log "Python 不可用" "ERROR"
-        return $false
-    }
-
-    if ($pythonInfo.MeetsRequirement -eq $false) {
-        Write-Log "Python 版本不满足要求 (需要 >= 3.11)" "ERROR"
-        return $false
-    }
-
-    $pythonExe = (Get-Command python).Source
-
-    if (Test-Path $VenvDir) {
-        Write-Log "虚拟环境已存在: $VenvDir" "INFO"
-    } else {
-        if (-not (New-VenvEnvironment -PythonExe $pythonExe)) {
-            return $false
-        }
-    }
-
-    $venvPython = Get-VenvPythonExe
-    if (Install-Package -PythonExe $venvPython -Package 'markitdown[all]' -MirrorType $Mirror -CustomMirror $CustomMirror) {
-        Write-Log "虚拟环境设置完成" "SUCCESS"
-        return $true
-    }
-
-    return $false
-}
-
-function Setup-Environment {
-    Write-Log "======================================" "INFO"
-    Write-Log "环境检测开始" "INFO"
-    Write-Log "======================================" "INFO"
-
-    Write-Log "" "INFO"
-    Write-Log "步骤 1: 检测 Python 环境" "INFO"
-    $pythonInfo = Test-PythonVersion
-    if (-not $pythonInfo) {
-        Write-Log "未找到 Python，请先安装 Python 3.11+" "ERROR"
-        Write-Log "下载地址: https://www.python.org/downloads/" "INFO"
-        return $false
-    }
-
-    if ($pythonInfo.MeetsRequirement -eq $false) {
-        Write-Log "Python 版本过低: $($pythonInfo.Version)，需要 >= 3.11" "ERROR"
-        Write-Log "请升级 Python: https://www.python.org/downloads/" "INFO"
-        return $false
-    }
-
-    Write-Log "" "INFO"
-    Write-Log "步骤 2: 检测 Conda 环境" "INFO"
-    $condaPath = Test-CondaAvailable
-
-    if ($condaPath) {
-        Write-Log "Conda 可用" "INFO"
-        if ($EnvironmentType -eq "venv") {
-            Write-Log "用户指定使用 venv，将跳过 Conda" "WARNING"
-        } else {
-            Write-Log "使用 Conda 环境" "INFO"
-            if (Setup-WithConda) {
-                return $true
-            }
-            Write-Log "Conda 设置失败，尝试使用 venv..." "WARNING"
-        }
-    } else {
-        Write-Log "Conda 不可用" "INFO"
-    }
-
-    if ($EnvironmentType -eq "conda") {
-        Write-Log "用户指定使用 Conda，但 Conda 不可用" "ERROR"
-        return $false
-    }
-
-    Write-Log "" "INFO"
-    Write-Log "步骤 3: 创建虚拟环境 (venv)" "INFO"
-    if (Setup-WithVenv) {
-        return $true
     }
 
     return $false
 }
 
 function Get-EnvironmentPython {
-    $condaPath = Test-CondaAvailable
+    $condaPath = Test-CondaInstalled
 
     if ($condaPath) {
-        $envName = "markitdown"
+        $envName = $script:EnvName
         if (Test-CondaEnvironmentExists -EnvName $envName) {
             $pythonExe = Get-PythonExePath -EnvName $envName
             if ($pythonExe) {
+                Write-Log "使用 Conda Python: $pythonExe" "INFO"
                 return $pythonExe
             }
-        }
-    }
-
-    if (Test-Path $VenvDir) {
-        $venvPython = Get-VenvPythonExe
-        if (Test-Path $venvPython) {
-            return $venvPython
         }
     }
 
@@ -502,7 +394,7 @@ function Convert-Document {
         $OutputPath = Get-Location
     }
 
-    Write-Log "转换文档..." "INFO"
+    Write-Log "转���文档..." "INFO"
     Write-Log "  输入: $resolvedInput" "INFO"
     Write-Log "  输出: $outputFile" "INFO"
 
@@ -538,26 +430,27 @@ function Show-Help {
     Write-Host @"
 
 ================================================================================
-MarkItDown 环境管理器 - 智能环境检测与设置
+MarkItDown 环境管理器 - Conda 环境检测与自动创建
 ================================================================================
 
 平台: $os
+版本: v5.0.0
 
 用法: manage_environment.ps1 -Command <命令> [选项]
 
 --------------------------------------------------------------------------------
-环境检测流程:
+环境检测与创建流程 (仅 Conda):
 --------------------------------------------------------------------------------
-  步骤 1: 检测 Python >= 3.11
-  步骤 2: 检测 Conda 环境
-  步骤 3: 如无 Conda，创建 venv 虚拟环境
+  步骤 1: 检测 Conda 是否安装
+  步骤 2: 检测 Conda 环境是否存在
+  步骤 3: 自动创建 Conda 环境（如不存在）
   步骤 4: 安装 markitdown[all]
 
 --------------------------------------------------------------------------------
 命令:
 --------------------------------------------------------------------------------
-    check              检查环境状态
-    setup             自动设置环境（推荐）
+    check              检查 Conda 环境状态
+    setup             自动设置 Conda 环境（推荐）
     run <命令>         运行命令
     convert           转换文档
     help              显示帮助
@@ -565,10 +458,6 @@ MarkItDown 环境管理器 - 智能环境检测与设置
 --------------------------------------------------------------------------------
 选项:
 --------------------------------------------------------------------------------
-    -EnvironmentType   环境类型:
-                      - auto:   自动选择（默认，优先 Conda）
-                      - conda:  强制使用 Conda
-                      - venv:   强制使用 venv
     -Mirror <镜像源>  pip 镜像源:
                       - default:   官方 PyPI
                       - tsinghua:  清华大学镜像
@@ -580,17 +469,14 @@ MarkItDown 环境管理器 - 智能环境检测与设置
 --------------------------------------------------------------------------------
 使用示例:
 --------------------------------------------------------------------------------
-    # 检查环境
+    # 检查环境状态
     .\manage_environment.ps1 -Command check
 
-    # 自动设置环境（使用默认源）
+    # 自动设置环境（自动检测并创建 Conda 环境）
     .\manage_environment.ps1 -Command setup
 
     # 使用阿里云镜像设置环境
     .\manage_environment.ps1 -Command setup -Mirror aliyun
-
-    # 强制使用 venv
-    .\manage_environment.ps1 -Command setup -EnvironmentType venv
 
     # 运行脚本
     .\manage_environment.ps1 -Command run -RunCommand @("python", "--version")
@@ -601,15 +487,14 @@ MarkItDown 环境管理器 - 智能环境检测与设置
 --------------------------------------------------------------------------------
 环境要求:
 --------------------------------------------------------------------------------
-    Python >= 3.11
-    可选: Conda (Miniconda/Anaconda)
+    Conda (Miniconda/Anaconda) - 必需
     网络: PyPI 或国内镜像
 
 --------------------------------------------------------------------------------
 环境信息:
 --------------------------------------------------------------------------------
-    Conda 环境: C:\Users\<用户>\.conda\envs\markitdown
-    Venv 目录:  $VenvDir
+    Conda 环境: $env:USERPROFILE\.conda\envs\$script:EnvName
+    日志文件:  $LogFile
 
 ================================================================================
 
@@ -617,31 +502,29 @@ MarkItDown 环境管理器 - 智能环境检测与设置
 }
 
 Write-Host ""
-Write-Host "MarkItDown 环境管理器" -ForegroundColor Cyan
+Write-Host "MarkItDown 环境管理器 v5.0.0" -ForegroundColor Cyan
 Write-Host "平台: $(Get-OperatingSystem)" -ForegroundColor Cyan
 Write-Host ""
 
 switch ($Command) {
     "check" {
-        Write-Log "检测 Python 环境..." "INFO"
-        $pythonInfo = Test-PythonVersion
-        if (-not $pythonInfo) {
-            Write-Log "未找到 Python" "ERROR"
-        } elseif ($pythonInfo.MeetsRequirement -eq $false) {
-            Write-Log "Python 版本不满足要求" "ERROR"
-        }
+        Write-Log "======================================" "INFO"
+        Write-Log "Conda 环境状态检测" "INFO"
+        Write-Log "======================================" "INFO"
 
-        Write-Log "" "INFO"
-        Write-Log "检测 Conda 环境..." "INFO"
-        $condaPath = Test-CondaAvailable
+        Write-Log "检测 Conda 安装状态..." "INFO"
+        $condaPath = Test-CondaInstalled
         if ($condaPath) {
-            Write-Log "Conda 可用" "SUCCESS"
+            Write-Log "Conda 已安装 ✓" "SUCCESS"
+            Write-Log "" "INFO"
+            Write-Log "检测 Conda 环境..." "INFO"
+            $envExists = Test-CondaEnvironmentExists -EnvName $script:EnvName
         } else {
-            Write-Log "Conda 不可用" "WARNING"
+            Write-Log "Conda 未安装" "ERROR"
         }
 
         Write-Log "" "INFO"
-        Write-Log "检测本地环境..." "INFO"
+        Write-Log "检测 Python 环境..." "INFO"
         $pythonExe = Get-EnvironmentPython
         if ($pythonExe) {
             Write-Log "已设置 Python: $pythonExe" "SUCCESS"
@@ -653,7 +536,7 @@ switch ($Command) {
         $result = Setup-Environment
         if ($result) {
             Write-Log "" "INFO"
-            Write-Log "环境设置完成！" "SUCCESS"
+            Write-Log "环境设置完成！✓" "SUCCESS"
             exit 0
         } else {
             Write-Log "" "ERROR"

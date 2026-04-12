@@ -1,20 +1,18 @@
 #!/bin/bash
 # MarkItDown Environment Manager
-# 智能环境管理器 - 自动检测并设置 Python/Conda 环境
-# 流程: Python检测 -> Conda检测 -> 虚拟环境创建 -> 依赖安装
+# 智能环境管理器 - 仅 Conda 环境检测与自动创建
+# 流程: Conda检测 -> 环境检测 -> 自动创建 -> 依赖安装
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/environment.log"
-VENV_DIR="${SCRIPT_DIR}/.venv"
 ENV_NAME="markitdown"
 
 PIP_TIMEOUT="${MARKITDOWN_PIP_TIMEOUT:-120}"
 PIP_RETRIES="${MARKITDOWN_PIP_RETRIES:-3}"
 PIP_MIRROR="${MARKITDOWN_PIP_MIRROR:-default}"
 CUSTOM_MIRROR="${MARKITDOWN_CUSTOM_MIRROR:-}"
-ENV_TYPE="${MARKITDOWN_ENV_TYPE:-auto}"
 
 detect_os() {
     local os_name="Unknown"
@@ -56,40 +54,15 @@ log_error() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $*" | tee -a "$LOG_FILE" >&2
 }
 
-test_python_version() {
-    if ! command -v python &> /dev/null; then
-        log_error "未找到 Python"
-        return 1
-    fi
+test_conda_installed() {
+    log_info "======================================"
+    log_info "步骤 1: 检测 Conda 是否安装"
+    log_info "======================================"
 
-    local version_output
-    version_output=$(python --version 2>&1)
-
-    if [[ "$version_output" =~ Python\ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-        local major="${BASH_REMATCH[1]}"
-        local minor="${BASH_REMATCH[2]}"
-        local patch="${BASH_REMATCH[3]}"
-        local full_version="$major.$minor.$patch"
-
-        if [[ $major -gt 3 ]] || [[ $major -eq 3 && $minor -gt 11 ]] || [[ $major -eq 3 && $minor -eq 11 ]]; then
-            log_success "Python 版本: $full_version (满足要求 >= 3.11)"
-            echo "$full_version"
-            return 0
-        else
-            log_error "Python 版本过低: $full_version (需要 >= 3.11)"
-            return 1
-        fi
-    fi
-
-    log_error "无法解析 Python 版本"
-    return 1
-}
-
-test_conda_available() {
     if command -v conda &> /dev/null; then
         local version
         version=$(conda --version 2>&1)
-        log_success "找到 Conda: $version"
+        log_success "Conda 已安装: $version"
         return 0
     fi
 
@@ -98,20 +71,55 @@ test_conda_available() {
             export PATH="$conda_path:$PATH"
             local version
             version=$(conda --version 2>&1)
-            log_success "找到 Conda: $version"
+            log_success "Conda 已安装: $version (路径: $conda_path)"
             return 0
         fi
     done
 
+    log_error "系统未安装 Conda"
+    log_info "请先安装 Miniconda 或 Anaconda"
+    log_info "下载链接: https://docs.conda.io/en/latest/miniconda.html"
     return 1
 }
 
 test_conda_environment_exists() {
     local env_name="$1"
 
+    log_info "检测 Conda 环境 '$env_name'..."
+
+    if ! test_conda_installed &>/dev/null; then
+        log_error "Conda 未安装，无法检测环境"
+        return 1
+    fi
+
     if conda env list 2>/dev/null | grep -qE "(^|\s)${env_name}(\s|$)"; then
+        log_success "Conda 环境 '$env_name' 已存在 ✓"
         return 0
     else
+        log_info "Conda 环境 '$env_name' 不存在，将自动创建"
+        return 1
+    fi
+}
+
+new_conda_environment() {
+    local env_name="$1"
+
+    log_info "======================================"
+    log_info "步骤 2: 自动创建 Conda 环境"
+    log_info "======================================"
+
+    if ! test_conda_installed &>/dev/null; then
+        log_error "无法创建环境: Conda 未安装"
+        return 1
+    fi
+
+    log_info "正在创建 Conda 环境 '$env_name' (python=3.11)..."
+
+    if conda create -n "$env_name" python=3.11 -y 2>&1 | tee -a "$LOG_FILE"; then
+        log_success "Conda 环境 '$env_name' 创建成功 ✓"
+        return 0
+    else
+        log_error "Conda 环境创建失败"
         return 1
     fi
 }
@@ -133,10 +141,6 @@ get_conda_python_path() {
     done
 
     return 1
-}
-
-get_venv_python_path() {
-    echo "$VENV_DIR/bin/python"
 }
 
 get_pip_mirror_index() {
@@ -168,10 +172,13 @@ install_package() {
     local mirror_type="$3"
     local custom_index="$4"
 
+    log_info "======================================"
+    log_info "步骤 3: 安装依赖包"
+    log_info "======================================"
     log_info "安装 $package..."
     log_info "使用镜像: $mirror_type"
 
-    local install_args=("-m" "pip" "install" "--no-cache-dir" "$package")
+    local install_args=("-m" "pip" "install" "--no-cache-dir" "--timeout" "$PIP_TIMEOUT" "$package")
 
     local mirror_index
     mirror_index=$(get_pip_mirror_index "$mirror_type" "$custom_index")
@@ -194,8 +201,9 @@ install_package() {
             sleep "$wait_time"
         fi
 
+        log_info "安装尝试 $attempt..."
         if "$python_exe" "${install_args[@]}" 2>&1 | tee -a "$LOG_FILE"; then
-            log_success "$package 安装成功"
+            log_success "$package 安装成功 ✓"
             success=true
         else
             log_warning "安装尝试 $attempt 失败"
@@ -210,145 +218,49 @@ install_package() {
     return 0
 }
 
-new_venv_environment() {
-    local python_exe="$1"
+setup_environment() {
+    local env_name="$ENV_NAME"
 
-    log_info "创建虚拟环境..."
-
-    if [[ -d "$VENV_DIR" ]]; then
-        log_info "虚拟环境已存在: $VENV_DIR"
-        return 0
-    fi
-
-    if "$python_exe" -m venv "$VENV_DIR" 2>&1 | tee -a "$LOG_FILE"; then
-        log_success "虚拟环境创建成功: $VENV_DIR"
-        return 0
-    else
-        log_error "虚拟环境创建失败"
+    if ! test_conda_installed &>/dev/null; then
+        log_error "Conda 未安装，无法继续"
         return 1
     fi
-}
 
-setup_with_conda() {
-    log_info "使用 Conda 环境..."
+    log_info "======================================"
+    log_info "环境设置开始"
+    log_info "目标环境: $env_name"
+    log_info "======================================"
 
-    if test_conda_environment_exists "$ENV_NAME"; then
-        log_info "Conda 环境 '$ENV_NAME' 已存在"
+    if test_conda_environment_exists "$env_name"; then
+        log_info "使用现有 Conda 环境"
         local python_exe
-        if python_exe=$(get_conda_python_path "$ENV_NAME"); then
+        if python_exe=$(get_conda_python_path "$env_name"); then
             if install_package "$python_exe" 'markitdown[all]' "$PIP_MIRROR" "$CUSTOM_MIRROR"; then
-                log_success "Conda 环境设置完成"
+                log_success "依赖安装完成 ✓"
                 return 0
             fi
         fi
     else
-        log_info "创建 Conda 环境..."
-        if conda create -n "$ENV_NAME" python=3.11 -y 2>&1 | tee -a "$LOG_FILE"; then
-            log_success "Conda 环境创建成功"
+        if new_conda_environment "$env_name"; then
             local python_exe
-            if python_exe=$(get_conda_python_path "$ENV_NAME"); then
+            if python_exe=$(get_conda_python_path "$env_name"); then
                 if install_package "$python_exe" 'markitdown[all]' "$PIP_MIRROR" "$CUSTOM_MIRROR"; then
-                    log_success "Conda 环境设置完成"
+                    log_success "环境设置完成 ✓"
                     return 0
                 fi
             fi
-        else
-            log_error "Conda 环境创建失败"
         fi
-    fi
-
-    return 1
-}
-
-setup_with_venv() {
-    log_info "使用 venv 虚拟环境..."
-
-    if ! test_python_version &>/dev/null; then
-        log_error "Python 不可用"
-        return 1
-    fi
-
-    local python_exe
-    python_exe=$(command -v python)
-
-    if [[ -d "$VENV_DIR" ]]; then
-        log_info "虚拟环境已存在: $VENV_DIR"
-    else
-        if ! new_venv_environment "$python_exe"; then
-            return 1
-        fi
-    fi
-
-    local venv_python
-    venv_python=$(get_venv_python_path)
-
-    if install_package "$venv_python" 'markitdown[all]' "$PIP_MIRROR" "$CUSTOM_MIRROR"; then
-        log_success "虚拟环境设置完成"
-        return 0
-    fi
-
-    return 1
-}
-
-setup_environment() {
-    log_info "======================================"
-    log_info "环境检测开始"
-    log_info "======================================"
-    log_info ""
-    log_info "步骤 1: 检测 Python 环境"
-
-    if ! test_python_version; then
-        log_error "未找到 Python，请先安装 Python 3.11+"
-        log_info "下载地址: https://www.python.org/downloads/"
-        return 1
-    fi
-
-    log_info ""
-    log_info "步骤 2: 检测 Conda 环境"
-
-    if test_conda_available; then
-        log_info "Conda 可用"
-        if [[ "$ENV_TYPE" == "venv" ]]; then
-            log_warning "用户指定使用 venv，将跳过 Conda"
-        else
-            log_info "使用 Conda 环境"
-            if setup_with_conda; then
-                return 0
-            fi
-            log_warning "Conda 设置失败，尝试使用 venv..."
-        fi
-    else
-        log_info "Conda 不可用"
-    fi
-
-    if [[ "$ENV_TYPE" == "conda" ]]; then
-        log_error "用户指定使用 Conda，但 Conda 不可用"
-        return 1
-    fi
-
-    log_info ""
-    log_info "步骤 3: 创建虚拟环境 (venv)"
-    if setup_with_venv; then
-        return 0
     fi
 
     return 1
 }
 
 get_environment_python() {
-    if test_conda_available && test_conda_environment_exists "$ENV_NAME"; then
+    if test_conda_installed &>/dev/null && test_conda_environment_exists "$ENV_NAME"; then
         local python_path
         if python_path=$(get_conda_python_path "$ENV_NAME"); then
+            log_info "使用 Conda Python: $python_path"
             echo "$python_path"
-            return 0
-        fi
-    fi
-
-    if [[ -d "$VENV_DIR" ]]; then
-        local venv_python
-        venv_python=$(get_venv_python_path)
-        if [[ -f "$venv_python" ]]; then
-            echo "$venv_python"
             return 0
         fi
     fi
@@ -430,37 +342,34 @@ show_help() {
     cat << EOF
 
 ================================================================================
-MarkItDown 环境管理器 - 智能环境检测与设置
+MarkItDown 环境管理器 - Conda 环境检测与自动创建
 ================================================================================
 
 平台: $SCRIPT_OS
+版本: v5.0.0
 
 用法: $0 <命令> [选项]
 
 --------------------------------------------------------------------------------
-环境检测流程:
+环境检测与创建流程 (仅 Conda):
 --------------------------------------------------------------------------------
-  步骤 1: 检测 Python >= 3.11
-  步骤 2: 检测 Conda 环境
-  步骤 3: 如无 Conda，创建 venv 虚拟环境
+  步骤 1: 检测 Conda 是否安装
+  步骤 2: 检测 Conda 环境是否存在
+  步骤 3: 自动创建 Conda 环境（如不存在）
   步骤 4: 安装 markitdown[all]
 
 --------------------------------------------------------------------------------
 命令:
 --------------------------------------------------------------------------------
-    check              检查环境状态
-    setup             自动设置环境（推荐）
+    check              检查 Conda 环境状态
+    setup             自动设置 Conda 环境（推荐）
     run <命令>         运行命令
     convert           转换文档
     help              显示帮助
 
 --------------------------------------------------------------------------------
-选项:
+选��:
 --------------------------------------------------------------------------------
-    --env-type <类型>     环境类型:
-                        - auto:   自动选择（默认，优先 Conda）
-                        - conda:  强制使用 Conda
-                        - venv:   强制使用 venv
     -m, --mirror <镜像>  pip 镜像源:
                         - default:   官方 PyPI
                         - tsinghua:  清华大学镜像
@@ -471,17 +380,14 @@ MarkItDown 环境管理器 - 智能环境检测与设置
 --------------------------------------------------------------------------------
 使用示例:
 --------------------------------------------------------------------------------
-    # 检查环境
+    # 检查环境状态
     $0 check
 
-    # 自动设置环境（使用默认源）
+    # 自动设置环境（自动检测并创建 Conda 环境）
     $0 setup
 
     # 使用阿里云镜像设置环境
     $0 setup --mirror aliyun
-
-    # 强制使用 venv
-    $0 setup --env-type venv
 
     # 运行脚本
     $0 run python --version
@@ -492,15 +398,14 @@ MarkItDown 环境管理器 - 智能环境检测与设置
 --------------------------------------------------------------------------------
 环境要求:
 --------------------------------------------------------------------------------
-    Python >= 3.11
-    可选: Conda (Miniconda/Anaconda)
+    Conda (Miniconda/Anaconda) - 必需
     网络: PyPI 或国内镜像
 
 --------------------------------------------------------------------------------
 环境信息:
 --------------------------------------------------------------------------------
-    Conda 环境: ~/.conda/envs/markitdown
-    Venv 目录:  $VENV_DIR
+    Conda 环境: ~/.conda/envs/$ENV_NAME
+    日志文件:  $LOG_FILE
 
 ================================================================================
 
@@ -512,18 +417,12 @@ main() {
     shift || true
 
     local mirror_type="$PIP_MIRROR"
-    local env_type="$ENV_TYPE"
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
             -m|--mirror)
                 mirror_type="$2"
                 export MARKITDOWN_PIP_MIRROR="$mirror_type"
-                shift 2
-                ;;
-            --env-type)
-                env_type="$2"
-                export MARKITDOWN_ENV_TYPE="$env_type"
                 shift 2
                 ;;
             -h|--help)
@@ -537,29 +436,28 @@ main() {
     done
 
     echo ""
-    echo -e "\033[36mMarkItDown 环境管理器\033[0m"
+    echo -e "\033[36mMarkItDown 环境管理器 v5.0.0\033[0m"
     echo -e "\033[36m平台: $SCRIPT_OS\033[0m"
     echo ""
 
     case "$command" in
         check)
+            log_info "======================================"
+            log_info "Conda 环境状态检测"
+            log_info "======================================"
+
+            log_info "检测 Conda 安装状态..."
+            if test_conda_installed; then
+                log_success "Conda 已安装 ✓"
+                log_info ""
+                log_info "检测 Conda 环境..."
+                test_conda_environment_exists "$ENV_NAME"
+            else
+                log_error "Conda 未安装"
+            fi
+
+            log_info ""
             log_info "检测 Python 环境..."
-            if test_python_version; then
-                :
-            else
-                log_error "Python 版本不满足要求"
-            fi
-
-            log_info ""
-            log_info "检测 Conda 环境..."
-            if test_conda_available; then
-                :
-            else
-                log_warning "Conda 不可用"
-            fi
-
-            log_info ""
-            log_info "检测本地环境..."
             if python_exe=$(get_environment_python); then
                 log_success "已设置 Python: $python_exe"
             else
@@ -568,10 +466,9 @@ main() {
             ;;
         setup)
             export PIP_MIRROR="$mirror_type"
-            export ENV_TYPE="$env_type"
             if setup_environment; then
                 log_info ""
-                log_success "环境设置完成！"
+                log_success "环境设置完成！✓"
                 exit 0
             else
                 log_error ""

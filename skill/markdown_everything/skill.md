@@ -5,18 +5,20 @@ description: |
 
   ## 核心能力
 - 跨平台支持：Windows PowerShell / Linux Bash / macOS Bash
-- 自动环境管理：智能检测、自动创建、自动激活 Conda 环境
-- **pip Fallback**：conda 不可用时自动使用 pip 安装
+- **仅 Conda 环境**：仅支持 Conda 环境检测与自动创建
+- **自动创建 Conda 环境**：Conda 环境不存在时自动创建
 - **PDF中文编码自动修复**：智能检测并修复中文PDF乱码问题
 - 多格式支持：PDF、Word、Excel、PPT、图片、音频等 20+ 种格式
 - 零配置使用：首次自动初始化，后续即开即用
+- **详细日志**：完整的环境检测和问题排查日志
 
   ## 技术特性
   - 统一的命令行接口（CLI）
   - 完善的错误处理和日志记录
   - 环境变量灵活配置
   - 跨平台路径自动适配
-  - 智能 fallback 机制（conda → pip）
+  - 自动环境创建流程
+  - 仅 Conda，无 venv 回退
 
 ---
 
@@ -382,22 +384,23 @@ Conda 可用? ───是──→ 使用 Conda 环境
 
 **输出示例：**
 ```
-Python 版本: 3.12.0 (满足要求 >= 3.11)
+[2024-XX-XX XX:XX:XX] [INFO] 步骤 1: 检测 Python 环境
+[2024-XX-XX XX:XX:XX] [SUCCESS] Python 版本: 3.12.0 (>= 3.11 ✓)
 ```
 
 **如果 Python 版本过低：**
 ```
-Python 版本过低: 3.9.0 (需要 >= 3.11)
-请升级 Python: https://www.python.org/downloads/
+[2024-XX-XX XX:XX:XX] [ERROR] Python 版本过低: 3.9.0 (需要 >= 3.11)
+下载地址: https://www.python.org/downloads/
 ```
 
 **如果未安装 Python：**
 ```
-未找到 Python，请先安装 Python 3.11+
+[2024-XX-XX XX:XX:XX] [ERROR] 未找到 Python，请先安装 Python 3.11+
 下载地址: https://www.python.org/downloads/
 ```
 
-#### 步骤 2: Conda 环境检测
+#### 步骤 2: Conda 安装检测
 
 检查是否安装了 Conda (Miniconda 或 Anaconda)。
 
@@ -408,29 +411,52 @@ Python 版本过低: 3.9.0 (需要 >= 3.11)
 
 **输出示例：**
 ```
-找到 Conda: conda 23.3.1
-Conda 可用
+[2024-XX-XX XX:XX:XX] [INFO] ======================================
+[2024-XX-XX XX:XX:XX] [INFO] 步骤 1: 检测 Conda 是否安装
+[2024-XX-XX XX:XX:XX] [INFO] ======================================
+[2024-XX-XX XX:XX:XX] [SUCCESS] Conda 已安装: conda 23.3.1
 ```
 
 **如果 Conda 不可用：**
 ```
-Conda 不可用
-将使用 venv 虚拟环境
+[2024-XX-XX XX:XX:XX] [WARNING] 系统未安装 Conda
+[2024-XX-XX XX:XX:XX] [WARNING] Conda 不可用，将使用 venv 虚拟环境
 ```
 
-#### 步骤 3: 环境设置
+#### 步骤 3: Conda 环境检测
 
-根据检测结果自动选择最佳方式：
+检查 markitdown 环境是否存在。
 
-**有 Conda：** 使用 Conda 环境
-```powershell
-.\manage_environment.ps1 -Command setup
+**[2024-XX-XX XX:XX:XX] [INFO] 检测 Conda 环境 'markitdown'...
+[2024-XX-XX XX:XX:XX] [SUCCESS] Conda 环境 'markitdown' 已存在 ✓
+
+如果不存在：
+```
+[2024-XX-XX XX:XX:XX] [INFO] 检测 Conda 环境 'markitdown'...
+[2024-XX-XX XX:XX:XX] [INFO] Conda 环境 'markitdown' 不存在
 ```
 
-**无 Conda：** 自动创建 venv 虚拟环境
-```powershell
-# 脚本会自动创建 .venv 目录
-.\manage_environment.ps1 -Command setup
+#### 步骤 4: 自动创建 Conda 环境
+
+如果 Conda 环境不存在，脚本会自动创建：
+
+```
+[2024-XX-XX XX:XX:XX] [INFO] ======================================
+[2024-XX-XX XX:XX:XX] [INFO] 自动创建 Conda 环境: markitdown
+[2024-XX-XX XX:XX:XX] [INFO] ======================================
+[2024-XX-XX XX:XX:XX] [INFO] 正在创建环境 (python=3.11)...
+[2024-XX-XX XX:XX:XX] [SUCCESS] Conda 环境 'markitdown' 创建成功 ✓
+```
+
+#### 步骤 5: 安装依赖
+
+在创建的环境中安装 markitdown[all]：
+
+```
+[2024-XX-XX XX:XX:XX] [INFO] 安装 markitdown[all]...
+[2024-XX-XX XX:XX:XX] [INFO] 使用镜像: aliyun
+[2024-XX-XX XX:XX:XX] [SUCCESS] markitdown[all] 安装成功 ✓
+[2024-XX-XX XX:XX:XX] [SUCCESS] Conda 环境设置完成 ✓
 ```
 
 ### 环境类型选择
@@ -455,6 +481,43 @@ Conda 不可用
 | Conda 环境 | `~/.conda/envs/markitdown` 或 `~/anaconda3/envs/markitdown` |
 | Venv 目录 | `scripts/.venv` |
 | 日志文件 | `scripts/environment.log` |
+
+### 日志文件分析
+
+日志文件 (`environment.log`) 记录了所有的检测和创建过程，可以用于问题排查。
+
+**日志级别说明：**
+
+| 级别 | 说明 | 颜色 |
+|------|------|------|
+| `[INFO]` | 一般信息 | 青色 |
+| `[SUCCESS]` | 成功信息 | 绿色 |
+| `[WARNING]` | 警告信息 | 黄色 |
+| `[ERROR]` | 错误信息 | 红色 |
+
+**查看日志：**
+
+```powershell
+# PowerShell - 查看最近 20 行日志
+Get-Content environment.log -Tail 20
+
+# Bash - 查看最近 20 行日志
+tail -20 environment.log
+
+# 实时查看日志
+Get-Content environment.log -Wait
+```
+
+**常见日志模式分析：**
+
+| 日志模式 | 含义 | 解决方案 |
+|----------|------|----------|
+| `Python 版本: 3.12.0 (>= 3.11 ✓)` | Python 正常 | 无需操作 |
+| `Conda 已安装: conda 23.3.1` | Conda 正常 | 无需操作 |
+| `系统未安装 Conda` | 未安装 Conda | 脚本会自动使用 venv |
+| `Conda 环境 'markitdown' 已存在 ✓` | 环境已存在 | 无需操作 |
+| `Conda 环境 'markitdown' 不存在` | 环境不存在 | 脚本会自动创建 |
+| `Conda 环境创建成功 ✓` | 创建成功 | 无需操作 |
 
 ### 一键设置
 
@@ -481,11 +544,12 @@ Conda 不可用
 
 ### 环境要求
 
-- **Python**: >= 3.11
-- **可选**: Conda (Miniconda/Anaconda)
+- **Conda**: Miniconda 或 Anaconda (必需)
 - **网络**: PyPI 或国内镜像
 
 ---
+
+## 环境检测与设置
 
 ## 网络超时解决方案
 
@@ -987,16 +1051,14 @@ $env:MARKITDOWN_PYTHON_VER = "3.11"
 
 ## 更新日志
 
-### v4.0.0 (当前版本)
-- ✨ **智能环境检测**：新增 Python 版本 >= 3.11 检测
-- ✨ **自动 venv**：无 Conda 时自动创建虚拟环境
-- ✨ **环境类型选择**：支持通过 `-EnvironmentType` 选择 conda/venv/auto
-- 🔒 **继续安全优化**：不修改系统配置，不删除任何环境
-- ✨ **完整的检测流程**：步骤1检测Python -> 步骤2检测Conda -> 步骤3创建venv
-- 📝 **详细的文档**：添加智能环境检测章节和故障排除指南
-- 🔧 **简化命令**：保留最常用的 check、setup、run、convert 命令
+### v5.0.0 (当前版本)
+- 🔒 **移除 Python 检测**：仅保留 Conda 环境检测
+- 🔒 **移除 venv 回退**：不再支持 venv 虚拟环境
+- ✨ **仅 Conda**：只检测和创建 Conda 环境
+- ✨ **简化流程**：4 步流程 (检测安装 -> 检测环境 -> 自动创建 -> 安装依赖)
+- 📝 **环境要求更新**：Conda 变为必需
 
-### v3.2.0
+### v4.1.0
 - 🔒 **安全优化**：移除所有高危操作（create、remove、install、force命令）
 - 🔒 **临时镜像**：pip镜像配置仅在当前安装过程中使用，不持久化
 - 🔒 **环境保护**：不删除任何环境，不强制覆盖现有环境
