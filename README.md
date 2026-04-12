@@ -1,12 +1,21 @@
 # markdown_everything.skill
 
-[![](https://img.shields.io/badge/skill-AI%20Agent%20Skill-purple.svg)]() [![](https://img.shields.io/badge/version-v0.0.3-blue.svg)]() [![](https://img.shields.io/badge/license-MIT-green.svg)]() [![](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]() [![](https://img.shields.io/badge/python-3.11%2B-yellow.svg)]() [![](https://img.shields.io/badge/AI%20Agents-Claude%20Code%20%7C%20Cursor%20%7C%20Trae%20%7C%20Obsidian%20YOLO-orange.svg)]()
+[![skill-AI-Agent](https://img.shields.io/badge/skill-AI%20Agent%20Skill-purple.svg)]() 
+[![version-v0.0.3](https://img.shields.io/badge/version-v0.0.3-blue.svg)](https://github.com/wokaka209/markdown_everything)
+[![license-MIT](https://img.shields.io/badge/license-MIT-green.svg)]() 
+[![platform-WindowsOS](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]()
+[![python-3.11](https://img.shields.io/badge/python-3.11%2B-yellow.svg)](https://www.python.org/downloads/release/python-3111/) 
+[![AI-Agents](https://img.shields.io/badge/AI%20Agents-Claude%20Code%20%7C%20Cursor%20%7C%20Trae%20%7C%20Obsidian%20YOLO-orange.svg)]() 
+[![made-with-markdown](https://img.shields.io/badge/Made%20with-Markitdown-orange)](https://github.com/microsoft/markitdown)
+
 
 - ENreadme [English](README_en.md)
 
+[项目文件](#项目文件) · [核心用途](#核心用途) · [使用方法](#使用方法) · [前置要求](#前置要求)
+
 将 PDF、Word、Excel、PPT、图片等 20+ 种格式转换为 Markdown，让 AI Agent 能直接读取文档内容。
 
- ## 项目文件
+## 项目文件
 
 ```
 markdown_everything/

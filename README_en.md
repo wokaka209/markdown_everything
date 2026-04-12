@@ -1,8 +1,18 @@
 # markdown_everything.skill
 
-[![](https://img.shields.io/badge/skill-AI%20Agent%20Skill-purple.svg)]() [![](https://img.shields.io/badge/version-v0.0.1-blue.svg)]() [![](https://img.shields.io/badge/license-MIT-green.svg)]() [![](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]() [![](https://img.shields.io/badge/python-3.11%2B-yellow.svg)]() [![](https://img.shields.io/badge/AI%20Agents-Claude%20Code%20%7C%20Cursor%20%7C%20Trae%20%7C%20Obsidian%20YOLO-orange.svg)]()
+[![skill-AI-Agent](https://img.shields.io/badge/skill-AI%20Agent%20Skill-purple.svg)]() 
+[![version-v0.0.3](https://img.shields.io/badge/version-v0.0.3-blue.svg)](https://github.com/wokaka209/markdown_everything)
+[![license-MIT](https://img.shields.io/badge/license-MIT-green.svg)]() 
+[![platform-WindowsOS](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]()
+[![python-3.11](https://img.shields.io/badge/python-3.11%2B-yellow.svg)](https://www.python.org/downloads/release/python-3111/) 
+[![AI-Agents](https://img.shields.io/badge/AI%20Agents-Claude%20Code%20%7C%20Cursor%20%7C%20Trae%20%7C%20Obsidian%20YOLO-orange.svg)]() 
+[![made-with-markdown](https://img.shields.io/badge/Made%20with-Markitdown-orange)](https://github.com/microsoft/markitdown)
 
-Convert PDF, Word, Excel, PPT, images, and 20+ other formats to Markdown, enabling AI Agents to read and process your documents directly.
+- 中文文档 [简体中文](README.md)
+
+[Project Files](#project-files) · [Core Purpose](#core-purpose) · [Usage](#usage) · [Prerequisites](#prerequisites)
+
+Convert PDF, Word, Excel, PPT, images and 20+ other formats to Markdown, enabling AI Agents to read document content directly.
 
 ## Project Files
 
@@ -20,14 +30,14 @@ markdown_everything/
 
 ## Core Purpose
 
-When LLMs process documents like PDFs and DOCX files, reading Markdown directly produces better results. Markdown's plain text format and clear structure allow LLMs to accurately identify headings, tables, lists, and other elements, avoiding information loss from parsing binary formats.
+When LLMs process documents like PDFs and DOCX files, reading Markdown directly produces better results. Markdown's plain text format and clear structure allow LLMs to accurately identify heading levels, tables, lists, and other elements, avoiding information loss from parsing binary formats.
 
 ## Supported Document Formats
 
 | Category | Format | Description |
 |----------|--------|-------------|
 | Documents | `.pdf` `.docx` `.doc` | PDF, Word documents |
-| Spreadsheets | `.xlsx` `.xls` `.csv` | Excel, CSV files |
+| Spreadsheets | `.xlsx` `.xls` `.csv` | Excel, CSV spreadsheets |
 | Presentations | `.pptx` `.ppt` | PowerPoint slides |
 | Images | `.jpg` `.png` `.gif` `.bmp` | Image text recognition (OCR) |
 | Audio | `.mp3` `.wav` `.ogg` `.m4a` | Speech to text |
@@ -42,7 +52,7 @@ When LLMs process documents like PDFs and DOCX files, reading Markdown directly 
 Provide two parameters when calling:
 
 | Parameter | Description | Example |
-|-----------|-------------|---------|
+|----------|-------------|---------|
 | Full path to document | Source file to convert | `C:\docs\report.docx` |
 | Markdown save path | Where to save the output | `C:\output\report.md` |
 
@@ -91,7 +101,7 @@ If the AI Agent responds correctly and executes the conversion, deployment is su
 ### Technical Implementation
 
 - Uses markitdown as the conversion engine
-- Supports Unicode-level extraction for Chinese PDFs
+- Supports Chinese PDF Unicode-level extraction
 - Automatically handles mixed encoding text
 - Preserves document structure (headings, lists, tables)
 - Images support OCR text recognition
@@ -99,11 +109,11 @@ If the AI Agent responds correctly and executes the conversion, deployment is su
 ### Cross-Platform Scripts
 
 | Operating System | Script |
-|-----------------|--------|
+|----------|--------|
 | Windows | PowerShell: `manage_environment.ps1` |
 | Linux/macOS | Bash: `manage_environment.sh` |
 
-Scripts automatically detect Conda environments and fall back to pip when needed.
+Scripts automatically detect Conda environments and fall back to pip when not available.
 
 ## Usage Examples
 
@@ -162,17 +172,10 @@ Check if the file exists:
 Test-Path "C:\input\document.pdf"
 ```
 
-## Version Info
-
-- Current version: v0.0.1
-- Python version: 3.11+
-- Dependencies: markitdown[all]
-
 ## Related Links
 
 - MarkItDown: https://pypi.org/project/markitdown/
 - Conda: https://docs.conda.io/
-- Python: https://www.python.org/
 
 ---
 
