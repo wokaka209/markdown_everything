@@ -164,12 +164,6 @@ $env:Path += ";D:\anaconda;D:\anaconda\Scripts"
 Test-Path "C:\input\document.pdf"
 ```
 
-## 版本信息
-
-- 当前版本: v0.0.1
-- Python 版本: 3.11+
-- 依赖: markitdown[all]
-
 ## 相关链接
 
 - MarkItDown: https://pypi.org/project/markitdown/
