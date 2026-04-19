@@ -19,6 +19,10 @@ except ImportError:
     print("Error: markitdown is not installed. Please run setup_environment.ps1 first.")
     sys.exit(1)
 
+# 确保可以导入同目录下的 pdf_encoding_fixer 模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from pdf_encoding_fixer import PDFEncodingFixer
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -137,156 +141,6 @@ class DocumentConverter:
         ]
 
 
-class PDFEncodingFixer:
-    """
-    PDF编码修复器 - 解决中文PDF乱码问题
-    使用pdfplumber的字符级提取，直接获取Unicode字符
-    """
-
-    def __init__(self):
-        self.name = "pdfplumber_unicode"
-
-    @staticmethod
-    def is_available() -> bool:
-        """检查pdfplumber是否可用"""
-        try:
-            import pdfplumber
-            return True
-        except ImportError:
-            return False
-
-    @staticmethod
-    def _detect_text_quality(text: str) -> dict:
-        """检测文本质量"""
-        if not text:
-            return {'is_garbled': True, 'chinese_ratio': 0.0}
-
-        replacement_char = '\ufffd'
-        replacement_count = text.count(replacement_char)
-        chinese_chars = len(re.findall(r'[\u4e00-\u9fff\u3400-\u4dbf]', text))
-        total_chars = len(text)
-
-        chinese_ratio = chinese_chars / total_chars if total_chars > 0 else 0.0
-        replacement_ratio = replacement_count / total_chars if total_chars > 0 else 0.0
-
-        is_garbled = replacement_ratio > 0.01 or (chinese_ratio < 0.1 and '?' in text)
-
-        return {
-            'is_garbled': is_garbled,
-            'chinese_ratio': chinese_ratio,
-            'replacement_ratio': replacement_ratio
-        }
-
-    @staticmethod
-    def _extract_chars_unicode(pdf_path: str) -> tuple:
-        """
-        使用pdfplumber的chars对象提取Unicode文本
-        关键：直接从字符对象获取unicode字段，绕过编码问题
-        """
-        import pdfplumber
-
-        try:
-            full_text = ""
-
-            with pdfplumber.open(pdf_path) as pdf:
-                for page_num, page in enumerate(pdf.pages):
-                    chars = page.chars
-
-                    if not chars:
-                        text = page.extract_text()
-                        if text:
-                            full_text += f"\n\n## Page {page_num + 1}\n\n{text}"
-                        continue
-
-                    text_parts = []
-                    current_text = ""
-                    last_bottom = None
-
-                    sorted_chars = sorted(
-                        chars,
-                        key=lambda c: (round(c.get('bottom', 0), 1), c.get('x0', 0))
-                    )
-
-                    for char in sorted_chars:
-                        char_bottom = round(char.get('bottom', 0), 1)
-
-                        if last_bottom is not None and abs(char_bottom - last_bottom) > 5:
-                            if current_text.strip():
-                                text_parts.append(current_text.strip())
-                            current_text = ""
-
-                        char_unicode = char.get('unicode', '')
-                        if char_unicode:
-                            current_text += char_unicode
-                        else:
-                            current_text += char.get('text', '')
-
-                        last_bottom = char_bottom
-
-                    if current_text.strip():
-                        text_parts.append(current_text.strip())
-
-                    page_text = '\n'.join(text_parts)
-                    if page_text.strip():
-                        full_text += f"\n\n## Page {page_num + 1}\n\n{page_text.strip()}"
-
-            return True, full_text.strip()
-
-        except Exception as e:
-            logger.error(f"pdfplumber chars extraction failed: {e}")
-            return False, str(e)
-
-    @staticmethod
-    def _clean_text(text: str) -> str:
-        """清理提取的文本"""
-        text = re.sub(r'\n{3,}', '\n\n', text)
-        text = re.sub(r'[ \t]+', ' ', text)
-        text = re.sub(r'([。！？；])\n([A-Za-z\u4e00-\u9fff])', r'\1\2', text)
-        return text.strip()
-
-    def convert(self, pdf_path: str) -> dict:
-        """
-        转换PDF文件，优先使用Unicode字符级提取
-
-        Args:
-            pdf_path: PDF文件路径
-
-        Returns:
-            dict: 包含success, text_content, method等信息
-        """
-        if not os.path.exists(pdf_path):
-            return {
-                'success': False,
-                'error': f'File not found: {pdf_path}',
-                'text_content': '',
-                'method': 'none'
-            }
-
-        logger.info(f"使用pdfplumber Unicode级提取转换PDF: {pdf_path}")
-
-        success, text = self._extract_chars_unicode(pdf_path)
-
-        if not success:
-            logger.warning("Unicode级提取失败")
-            return {
-                'success': False,
-                'error': text,
-                'text_content': '',
-                'method': 'failed'
-            }
-
-        quality = self._detect_text_quality(text)
-        logger.info(f"文本质量 - 乱码: {quality['is_garbled']}, "
-                   f"中文比例: {quality['chinese_ratio']:.2%}")
-
-        cleaned_text = self._clean_text(text)
-
-        return {
-            'success': True,
-            'text_content': cleaned_text,
-            'method': 'pdfplumber_unicode',
-            'quality': quality
-        }
 
 
 def parse_arguments():

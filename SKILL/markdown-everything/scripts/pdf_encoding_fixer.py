@@ -42,7 +42,7 @@ class PDFEncodingFixer:
             return {
                 'is_garbled': True,
                 'chinese_ratio': 0.0,
-                'replacement_char_ratio': 0.0
+                'replacement_ratio': 0.0
             }
 
         replacement_char = '\ufffd'

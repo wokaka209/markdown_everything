@@ -28,9 +28,15 @@ $ErrorActionPreference = "Continue"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $ScriptDir "environment.log"
 
-$script:PipTimeout = 120
-$script:PipRetries = 3
-$script:EnvName = "markitdown"
+$script:PipTimeout = if ($env:MARKITDOWN_PIP_TIMEOUT) { [int]$env:MARKITDOWN_PIP_TIMEOUT } else { 120 }
+$script:PipRetries = if ($env:MARKITDOWN_PIP_RETRIES) { [int]$env:MARKITDOWN_PIP_RETRIES } else { 3 }
+$script:EnvName = if ($env:MARKITDOWN_ENV_NAME) { $env:MARKITDOWN_ENV_NAME } else { "markitdown" }
+$script:PythonVer = if ($env:MARKITDOWN_PYTHON_VER) { $env:MARKITDOWN_PYTHON_VER } else { "3.12" }
+$script:UsePip = $env:MARKITDOWN_USE_PIP -eq "true"
+
+# Mirror: 参数优先，环境变量回退
+$script:EffectiveMirror = if ($Mirror -ne "default") { $Mirror } elseif ($env:MARKITDOWN_PIP_MIRROR) { $env:MARKITDOWN_PIP_MIRROR } else { "default" }
+$script:EffectiveCustomMirror = if ($CustomMirror) { $CustomMirror } elseif ($env:MARKITDOWN_CUSTOM_MIRROR) { $env:MARKITDOWN_CUSTOM_MIRROR } else { "" }
 
 $script:IsWindows = $PSVersionTable.Platform -eq 'Win32NT' -or $null -eq $PSVersionTable.Platform
 $script:IsLinux = $PSVersionTable.Platform -eq 'Unix' -and (Test-Path "/proc/version")
@@ -172,8 +178,8 @@ function New-CondaEnvironment {
             return $false
         }
 
-        Write-Log "正在创建 Conda 环境 '$EnvName' (python=3.11)..." "INFO"
-        $output = conda create -n $EnvName python=3.11 -y 2>&1
+        Write-Log "正在创建 Conda 环境 '$EnvName' (python=$($script:PythonVer))..." "INFO"
+        $output = conda create -n $EnvName python=$($script:PythonVer) -y 2>&1
         $outputStr = $output | Out-String
 
         if ($LASTEXITCODE -eq 0 -or $outputStr -match "To activate this environment") {
@@ -274,7 +280,45 @@ function Install-Package {
     return $true
 }
 
+function Get-SystemPython {
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $pythonCmd) {
+        $pythonCmd = Get-Command python3 -ErrorAction SilentlyContinue
+    }
+    if ($pythonCmd) {
+        return $pythonCmd.Source
+    }
+    return $null
+}
+
+function Setup-PipEnvironment {
+    Write-Log "======================================" "INFO"
+    Write-Log "pip 模式: 使用系统 Python" "INFO"
+    Write-Log "======================================" "INFO"
+
+    $pythonExe = Get-SystemPython
+    if (-not $pythonExe) {
+        Write-Log "未找到系统 Python，请先安装 Python 3.11+" "ERROR"
+        return $false
+    }
+
+    $pyVersion = & $pythonExe --version 2>&1
+    Write-Log "系统 Python: $pyVersion" "INFO"
+
+    if (Install-Package -PythonExe $pythonExe -Package 'markitdown[all]' -MirrorType $script:EffectiveMirror -CustomMirror $script:EffectiveCustomMirror) {
+        Write-Log "pip 模式环境设置完成 ✓" "SUCCESS"
+        return $true
+    }
+
+    return $false
+}
+
 function Setup-Environment {
+    # pip 模式: 跳过 conda，直接使用系统 Python
+    if ($script:UsePip) {
+        return Setup-PipEnvironment
+    }
+
     $envName = $script:EnvName
     $condaPath = Test-CondaInstalled
 
@@ -294,7 +338,7 @@ function Setup-Environment {
         Write-Log "使用现有 Conda 环境" "INFO"
         $pythonExe = Get-PythonExePath -EnvName $envName
         if ($pythonExe) {
-            if (Install-Package -PythonExe $pythonExe -Package 'markitdown[all]' -MirrorType $Mirror -CustomMirror $CustomMirror) {
+            if (Install-Package -PythonExe $pythonExe -Package 'markitdown[all]' -MirrorType $script:EffectiveMirror -CustomMirror $script:EffectiveCustomMirror) {
                 Write-Log "依赖安装完成 ✓" "SUCCESS"
                 return $true
             }
@@ -303,7 +347,7 @@ function Setup-Environment {
         if (New-CondaEnvironment -EnvName $envName) {
             $pythonExe = Get-PythonExePath -EnvName $envName
             if ($pythonExe) {
-                if (Install-Package -PythonExe $pythonExe -Package 'markitdown[all]' -MirrorType $Mirror -CustomMirror $CustomMirror) {
+                if (Install-Package -PythonExe $pythonExe -Package 'markitdown[all]' -MirrorType $script:EffectiveMirror -CustomMirror $script:EffectiveCustomMirror) {
                     Write-Log "环境设置完成 ✓" "SUCCESS"
                     return $true
                 }
@@ -315,6 +359,17 @@ function Setup-Environment {
 }
 
 function Get-EnvironmentPython {
+    # pip 模式: 返回系统 Python
+    if ($script:UsePip) {
+        $sysPython = Get-SystemPython
+        if ($sysPython) {
+            Write-Log "使用系统 Python: $sysPython" "INFO"
+            return $sysPython
+        }
+        Write-Log "pip 模式但未找到系统 Python" "ERROR"
+        return $null
+    }
+
     $condaPath = Test-CondaInstalled
 
     if ($condaPath) {

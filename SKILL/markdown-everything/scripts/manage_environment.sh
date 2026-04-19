@@ -7,12 +7,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="${SCRIPT_DIR}/environment.log"
-ENV_NAME="markitdown"
+ENV_NAME="${MARKITDOWN_ENV_NAME:-markitdown}"
+PYTHON_VER="${MARKITDOWN_PYTHON_VER:-3.12}"
 
 PIP_TIMEOUT="${MARKITDOWN_PIP_TIMEOUT:-120}"
 PIP_RETRIES="${MARKITDOWN_PIP_RETRIES:-3}"
 PIP_MIRROR="${MARKITDOWN_PIP_MIRROR:-default}"
 CUSTOM_MIRROR="${MARKITDOWN_CUSTOM_MIRROR:-}"
+USE_PIP="${MARKITDOWN_USE_PIP:-false}"
 
 detect_os() {
     local os_name="Unknown"
@@ -67,8 +69,8 @@ test_conda_installed() {
     fi
 
     for conda_path in "${CONDA_PATHS[@]}"; do
-        if [[ -f "$conda_path/conda" ]]; then
-            export PATH="$conda_path:$PATH"
+        if [[ -f "$conda_path/bin/conda" ]]; then
+            export PATH="$conda_path/bin:$PATH"
             local version
             version=$(conda --version 2>&1)
             log_success "Conda 已安装: $version (路径: $conda_path)"
@@ -113,9 +115,9 @@ new_conda_environment() {
         return 1
     fi
 
-    log_info "正在创建 Conda 环境 '$env_name' (python=3.11)..."
+    log_info "正在创建 Conda 环境 '$env_name' (python=$PYTHON_VER)..."
 
-    if conda create -n "$env_name" python=3.11 -y 2>&1 | tee -a "$LOG_FILE"; then
+    if conda create -n "$env_name" python="$PYTHON_VER" -y 2>&1 | tee -a "$LOG_FILE"; then
         log_success "Conda 环境 '$env_name' 创建成功 ✓"
         return 0
     else
@@ -218,8 +220,50 @@ install_package() {
     return 0
 }
 
+# 使用系统 pip 模式获取 Python
+get_system_python() {
+    if command -v python3 &> /dev/null; then
+        echo "python3"
+        return 0
+    elif command -v python &> /dev/null; then
+        echo "python"
+        return 0
+    fi
+    return 1
+}
+
+# 使用系统 pip 模式设置环境
+setup_pip_environment() {
+    log_info "======================================"
+    log_info "pip 模式: 使用系统 Python"
+    log_info "======================================"
+
+    local python_exe
+    if ! python_exe=$(get_system_python); then
+        log_error "未找到系统 Python，请先安装 Python 3.11+"
+        return 1
+    fi
+
+    local py_version
+    py_version=$("$python_exe" --version 2>&1)
+    log_info "系统 Python: $py_version"
+
+    if install_package "$python_exe" 'markitdown[all]' "$PIP_MIRROR" "$CUSTOM_MIRROR"; then
+        log_success "pip 模式环境设置完成 ✓"
+        return 0
+    fi
+
+    return 1
+}
+
 setup_environment() {
     local env_name="$ENV_NAME"
+
+    # pip 模式: 跳过 conda，直接使用系统 Python
+    if [[ "$USE_PIP" == "true" ]]; then
+        setup_pip_environment
+        return $?
+    fi
 
     if ! test_conda_installed &>/dev/null; then
         log_error "Conda 未安装，无法继续"
@@ -256,6 +300,17 @@ setup_environment() {
 }
 
 get_environment_python() {
+    # pip 模式: 返回系统 Python
+    if [[ "$USE_PIP" == "true" ]]; then
+        local python_exe
+        if python_exe=$(get_system_python); then
+            log_info "使用系统 Python: $python_exe"
+            echo "$python_exe"
+            return 0
+        fi
+        return 1
+    fi
+
     if test_conda_installed &>/dev/null && test_conda_environment_exists "$ENV_NAME"; then
         local python_path
         if python_path=$(get_conda_python_path "$ENV_NAME"); then
@@ -317,7 +372,7 @@ convert_document() {
     fi
 
     log_info "转换文档..."
-    log_info "  输入: $(realpath "$input_path")"
+    log_info "  输入: $(cd "$(dirname "$input_path")" && pwd)/$(basename "$input_path")"
     log_info "  输出: $output_file"
 
     local python_exe
