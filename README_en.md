@@ -1,202 +1,243 @@
 # markdown-everything
 
-[![skill-AI-Agent](https://img.shields.io/badge/skill-AI%20Agent%20Skill-purple.svg)]()
-[![version-v1.0.0](https://img.shields.io/badge/version-v1.0.0-blue.svg)](https://github.com/wokaka209/markdown_everything)
-[![license-MIT](https://img.shields.io/badge/license-MIT-green.svg)]()
-[![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]()
-[![python-3.11](https://img.shields.io/badge/python-3.11%2B-yellow.svg)]()
-[![AI-Agents](https://img.shields.io/badge/AI%20Agents-Codex%20%7C%20Claude%20Code%20%7C%20Cursor%20%7C%20Trae-orange.svg)]()
-[![made-with-markitdown](https://img.shields.io/badge/Made%20with-Markitdown-orange)](https://github.com/microsoft/markitdown)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://mit-license.org/zh-CN)
+[![Python](https://img.shields.io/badge/python-3.11%2B-yellow.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]()
 
-[简体中文](README.md)
+[English](README_en.md) | [简体中文](#功能说明)
 
-Convert PDF, Word, Excel, PPT, images, audio and 20+ other formats to Markdown, enabling AI Agents to read document content directly.
+markdown-everything converts various document formats to Markdown, enabling AI Agents to read document content directly.
 
-## Quick Start
-
-```bash
-pip install "markitdown[all]"
-markitdown "document.pdf" -o "output.md"
-```
-
-## Supported Formats
-
-| Category | Format | Description |
-|----------|--------|-------------|
-| Documents | `.pdf` `.docx` `.doc` | PDF, Word documents |
-| Spreadsheets | `.xlsx` `.xls` `.csv` | Excel, CSV spreadsheets |
-| Presentations | `.pptx` `.ppt` | PowerPoint slides |
-| Images | `.jpg` `.png` `.gif` `.bmp` | Image text recognition (OCR) |
-| Audio | `.mp3` `.wav` `.ogg` `.m4a` | Speech to text |
-| Web | `.html` `.htm` | HTML source extraction |
-| Data | `.json` `.xml` | Structured data conversion |
-| eBooks | `.epub` `.azw3` | eBook formats |
-| Archives | `.zip` | Batch document processing |
-
-## Key Features
-
-- **Chinese PDF Fix** — Automatically uses `pdfplumber` Unicode-level character extraction to resolve Chinese PDF encoding issues
-- **Environment Management** — Cross-platform scripts auto-detect Conda/pip, one-click setup
-- **LLM Enhancement** — Optional integration with OpenAI/Anthropic for intelligent optimization
-- **Agent Skills Standard** — Compliant with the [Agent Skills Open Standard](https://agentskills.io), compatible with Codex, Claude Code, and more
+---
 
 ## Project Structure
 
 ```
-SKILL/markdown-everything/
-├── SKILL.md                      # Skill definition (Agent Skills standard)
+markdown-everything/
+├── README.md                      # Project documentation
+├── README_en.md                  # English documentation
+├── SKILL.md                      # AI Agent Skill configuration
 └── scripts/
-    ├── convert_document.py        # Core conversion engine
-    ├── pdf_encoding_fixer.py      # PDF encoding fix module
-    ├── manage_environment.ps1     # Windows environment manager
-    └── manage_environment.sh      # Linux/macOS environment manager
+    ├── convert_document.py        # Conversion engine
+    ├── pdf_encoding_fixer.py       # PDF encoding handler
+    ├── manage_environment.ps1       # Windows environment manager
+    └── manage_environment.sh        # Linux/macOS environment manager
 ```
 
-## Installation
+---
 
-### Option 1: pip (Recommended)
+## Features
+
+This tool handles the following document types:
+
+- PDF documents (including Chinese PDFs)
+- Word documents (docx, doc)
+- Excel spreadsheets (xlsx, xls, csv)
+- PowerPoint presentations (pptx, ppt)
+- Text extraction from images (OCR)
+- Audio transcription
+- Web content extraction
+- JSON, XML and other data files
+- eBook formats (epub, azw3)
+
+---
+
+## Environment Setup
+
+### System Requirements
+
+- Python 3.11 or higher
+- pip package manager (or conda)
+
+### Dependency Installation
+
+Install core dependencies with pip:
 
 ```bash
 pip install "markitdown[all]"
 pip install pdfplumber
 ```
 
-### Option 2: Conda
-
-```bash
-conda create -n markitdown python=3.12 -y
-conda activate markitdown
-pip install "markitdown[all]"
-pip install pdfplumber
-```
-
-### Option 3: Environment Manager Script
-
-```powershell
-# Windows
-.\SKILL\markdown-everything\scripts\manage_environment.ps1 -Command setup
-
-# Linux/macOS
-bash SKILL/markdown-everything/scripts/manage_environment.sh setup
-```
-
-Use a mirror for faster downloads in China:
+Use China mirror (recommended):
 
 ```bash
 pip install "markitdown[all]" -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install pdfplumber -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
+
+Optional dependencies for LLM enhancement:
+
+```bash
+pip install openai      # GPT-4 enhancement
+pip install anthropic   # Claude enhancement
+```
+
+### Conda Environment Setup
+
+```bash
+conda create -n markitdown python=3.11 -y
+conda activate markitdown
+pip install "markitdown[all]"
+pip install pdfplumber
+```
+
+---
 
 ## Usage
 
-### Command Line
+### Using with AI Agent
 
-```bash
-# Convert and save
-markitdown "document.pdf" -o "output.md"
+When you need the AI Agent to process a document, simply state your requirement:
 
-# Using Python script (supports PDF encoding fix and LLM enhancement)
-python SKILL/markdown-everything/scripts/convert_document.py "document.pdf" -o "output.md"
+```
+Convert weekly-report.docx to Markdown format
+AI Agent will automatically call markitdown for conversion
 ```
 
-### Windows PowerShell Note
+Supported trigger methods:
 
-PowerShell does not support `&&` for chaining commands. Use semicolons `;` or separate lines:
+1. Direct description: Convert this document for me
+2. Specify format: Convert to Markdown
+3. Batch processing: Convert all documents in the directory
 
-```powershell
-# Correct: semicolon
-conda activate markitdown; markitdown "document.pdf" -o "output.md"
-
-# Correct: separate lines
-conda activate markitdown
-markitdown "document.pdf" -o "output.md"
-
-# Wrong: && not available in some PowerShell versions
-conda activate markitdown && markitdown "document.pdf" -o "output.md"
-```
-
-### Advanced Options
+### Command Line Usage
 
 ```bash
-# JSON output
-python scripts/convert_document.py "document.docx" --json-output
+markitdown document.pdf -o output.md
+```
 
-# Verbose logging
-python scripts/convert_document.py "document.docx" --verbose
+---
 
-# LLM enhancement
+## Advanced Features
+
+### Chinese PDF Processing
+
+If Chinese text in PDFs appears garbled, ensure pdfplumber is installed:
+
+```bash
+pip install pdfplumber
+```
+
+### LLM Enhancement
+
+Enable GPT-4 optimization:
+
+```bash
+export OPENAI_API_KEY="your-api-key"
 python scripts/convert_document.py "document.docx" --llm-client openai --llm-model gpt-4o -o "output.md"
+```
+
+Enable Claude optimization:
+
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
+python scripts/convert_document.py "document.docx" --llm-client anthropic --llm-model claude-3-sonnet -o "output.md"
 ```
 
 ### Batch Conversion
 
+PowerShell batch conversion:
+
 ```powershell
-# Windows PowerShell
 Get-ChildItem "C:\Documents\*.docx" | ForEach-Object {
     markitdown $_.FullName -o "$($_.DirectoryName)\$($_.BaseName).md"
 }
 ```
 
+Linux/macOS batch conversion:
+
 ```bash
-# Linux/macOS
 for f in /path/to/docs/*.docx; do
     markitdown "$f" -o "${f%.docx}.md"
 done
 ```
 
-## Deploy to AI Agent
+---
 
-### OpenAI Codex
+## Common Parameters
 
-```bash
-# Install skill to Codex skills directory
-$skill-installer install https://github.com/wokaka209/markdown_everything/tree/main/SKILL/markdown-everything
-```
+| Parameter | Description |
+|-----------|-------------|
+| -o, --output | Specify output file path |
+| --list-formats | List all supported formats |
+| --verbose | Show detailed execution information |
+| --json-output | Output in JSON format |
+| --llm-client | Select LLM client (openai/anthropic) |
+| --llm-model | Specify LLM model |
 
-Or manually copy `SKILL/markdown-everything/` to `~/.codex/skills/markdown-everything/`.
-
-### Claude Code
-
-```bash
-# Option 1: Skills format (recommended, supports auto-triggering)
-cp -r SKILL/markdown-everything ~/.claude/skills/markdown-everything
-
-# Option 2: Commands format (manual trigger only)
-mkdir -p ~/.claude/commands
-cp SKILL/markdown-everything/SKILL.md ~/.claude/commands/markdown.md
-```
-
-### Cursor / Trae / Obsidian YOLO
-
-Add custom commands or script paths in the Agent configuration page.
+---
 
 ## Environment Variables
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MARKITDOWN_ENV_NAME` | `markitdown` | Conda environment name |
-| `MARKITDOWN_PYTHON_VER` | `3.12` | Python version for Conda env |
-| `MARKITDOWN_USE_PIP` | `false` | Set to `true` to skip Conda and use system pip |
-| `MARKITDOWN_PIP_MIRROR` | `default` | pip mirror source (tsinghua/aliyun/douban/custom) |
-| `MARKITDOWN_CUSTOM_MIRROR` | — | Custom pip mirror URL |
-| `OPENAI_API_KEY` | — | GPT-4 enhanced conversion (optional) |
-| `ANTHROPIC_API_KEY` | — | Claude enhanced conversion (optional) |
-
-## FAQ
-
-| Issue | Solution |
-|-------|----------|
-| conda command not found | Install [Miniconda](https://docs.conda.io/en/latest/miniconda.html); Windows users use Anaconda Prompt |
-| pip install timeout | Use mirror: `pip install "markitdown[all]" -i https://pypi.tuna.tsinghua.edu.cn/simple` |
-| Chinese PDF garbled text | Ensure pdfplumber is installed: `pip install pdfplumber` |
-| Output file garbled | Output is UTF-8, open with VS Code |
-| PowerShell doesn't support `&&` | Use semicolons `;` to chain commands, or separate lines |
-
-## Related Links
-
-- MarkItDown: https://pypi.org/project/markitdown/
-- Agent Skills Standard: https://agentskills.io/
-- Conda: https://docs.conda.io/
+| MARKDOWN_ENV_NAME | markitdown | Conda environment name |
+| MARKDOWN_PYTHON_VER | 3.12 | Python version |
+| MARKDOWN_USE_PIP | false | Set to true to skip Conda |
+| MARKDOWN_PIP_MIRROR | default | pip mirror source |
+| OPENAI_API_KEY | - | GPT-4 API key |
+| ANTHROPIC_API_KEY | - | Claude API key |
 
 ---
 
-License: MIT
+## Troubleshooting
+
+### conda command not found
+
+Install Miniconda: https://docs.conda.io/en/latest/miniconda.html
+Windows users should use Anaconda Prompt to execute commands.
+
+### pip installation fails
+
+Use a mirror source:
+
+```bash
+pip install markitdown[all] -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+### Chinese PDF garbled
+
+Install pdfplumber:
+
+```bash
+pip install pdfplumber
+```
+
+### Output file garbled
+
+markitdown outputs UTF-8 encoding. Open the file with VS Code, select "Reopen with Encoding" and choose UTF-8.
+
+---
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit Issues and Pull Requests.
+
+1. Fork the repository
+2. Create your feature branch (git checkout -b feature/AmazingFeature)
+3. Commit your changes (git commit -m 'Add some AmazingFeature')
+4. Push to the branch (git push origin feature/AmazingFeature)
+5. Open a Pull Request
+
+---
+
+## Resources
+
+- markitdown project: https://pypi.org/project/markitdown/
+- Agent Skills standard: https://agentskills.io/
+- Conda documentation: https://docs.conda.io/
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details
+
+---
+
+## Contact
+
+Project author: wokaka209
+Project URL: https://github.com/wokaka209/markdown_everything
+
+[Back to Top](#markdown-everything)

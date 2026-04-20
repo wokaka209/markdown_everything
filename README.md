@@ -1,202 +1,243 @@
 # markdown-everything
 
-[![skill-AI-Agent](https://img.shields.io/badge/skill-AI%20Agent%20Skill-purple.svg)]()
-[![version-v1.0.0](https://img.shields.io/badge/version-v1.0.0-blue.svg)](https://github.com/wokaka209/markdown_everything)
-[![license-MIT](https://img.shields.io/badge/license-MIT-green.svg)]()
-[![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]()
-[![python-3.11](https://img.shields.io/badge/python-3.11%2B-yellow.svg)]()
-[![AI-Agents](https://img.shields.io/badge/AI%20Agents-Codex%20%7C%20Claude%20Code%20%7C%20Cursor%20%7C%20Trae-orange.svg)]()
-[![made-with-markitdown](https://img.shields.io/badge/Made%20with-Markitdown-orange)](https://github.com/microsoft/markitdown)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://mit-license.org/zh-CN)
+[![Python](https://img.shields.io/badge/python-3.11%2B-yellow.svg)](https://www.python.org/downloads/release/python-3110/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-green.svg)]()
 
-[English](README_en.md)
+[English](README_en.md) | [项目文档](#功能说明)
 
-将 PDF、Word、Excel、PPT、图片、音频等 20+ 种格式转换为 Markdown，让 AI Agent 能直接读取文档内容。
+markdown-everything 将各种格式的文档转换为 Markdown，让 AI Agent 能够直接读取文档内容。
 
-## 快速开始
-
-```bash
-pip install "markitdown[all]"
-markitdown "文档.pdf" -o "输出.md"
-```
-
-## 支持的格式
-
-| 类别 | 格式 | 说明 |
-|------|------|------|
-| 文档 | `.pdf` `.docx` `.doc` | PDF、Word 文档 |
-| 表格 | `.xlsx` `.xls` `.csv` | Excel、CSV 表格 |
-| 演示 | `.pptx` `.ppt` | PowerPoint 幻灯片 |
-| 图片 | `.jpg` `.png` `.gif` `.bmp` | 图片文字识别 (OCR) |
-| 音频 | `.mp3` `.wav` `.ogg` `.m4a` | 语音转文字 |
-| 网页 | `.html` `.htm` | HTML 源码提取 |
-| 数据 | `.json` `.xml` | 结构化数据转换 |
-| 电子书 | `.epub` `.azw3` | 电子书格式 |
-| 压缩 | `.zip` | 批量文档处理 |
-
-## 核心特性
-
-- **中文 PDF 修复** — 自动使用 `pdfplumber` Unicode 字符级提取，解决中文 PDF 乱码问题
-- **环境自动管理** — 跨平台脚本自动检测 Conda / pip，一键配置环境
-- **LLM 增强** — 可选集成 OpenAI / Anthropic 进行智能优化
-- **Agent Skills 标准** — 符合 [Agent Skills 开放标准](https://agentskills.io)，兼容 Codex、Claude Code 等
+---
 
 ## 项目结构
 
 ```
-SKILL/markdown-everything/
-├── SKILL.md                      # Skill 定义（Agent Skills 标准）
+markdown-everything/
+├── README.md                      # 项目说明文档
+├── README_en.md                   # English documentation
+├── SKILL.md                       # AI Agent Skill 配置
 └── scripts/
-    ├── convert_document.py        # 核心转换引擎
-    ├── pdf_encoding_fixer.py      # PDF 编码修复模块
-    ├── manage_environment.ps1     # Windows 环境管理器
-    └── manage_environment.sh      # Linux/macOS 环境管理器
+    ├── convert_document.py        # 转换引擎
+    ├── pdf_encoding_fixer.py      # PDF 编码处理
+    ├── manage_environment.ps1      # Windows 环境管理
+    └── manage_environment.sh       # Linux/macOS 环境管理
 ```
 
-## 安装
+---
 
-### 方式一：pip（推荐）
+## 功能说明
+
+这个工具可以处理以下类型的文档：
+
+- PDF 文档（包括中文 PDF）
+- Word 文档（docx, doc）
+- Excel 表格（xlsx, xls, csv）
+- PowerPoint 演示文稿（pptx, ppt）
+- 图片中的文字（OCR）
+- 音频文件转文字
+- 网页内容提取
+- JSON、XML 等数据文件
+- 电子书格式（epub, azw3）
+
+---
+
+## 环境配置
+
+### 系统要求
+
+- Python 3.11 或更高版本
+- pip 包管理器（或 conda）
+
+### 依赖安装
+
+使用 pip 安装核心依赖：
 
 ```bash
 pip install "markitdown[all]"
 pip install pdfplumber
 ```
 
-### 方式二：Conda
-
-```bash
-conda create -n markitdown python=3.12 -y
-conda activate markitdown
-pip install "markitdown[all]"
-pip install pdfplumber
-```
-
-### 方式三：环境管理脚本
-
-```powershell
-# Windows
-.\SKILL\markdown-everything\scripts\manage_environment.ps1 -Command setup
-
-# Linux/macOS
-bash SKILL/markdown-everything/scripts/manage_environment.sh setup
-```
-
-国内用户使用镜像加速：
+使用国内镜像（推荐）：
 
 ```bash
 pip install "markitdown[all]" -i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install pdfplumber -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-## 使用
-
-### 命令行
+可选依赖 - 如果需要 LLM 增强功能：
 
 ```bash
-# 转换并保存
-markitdown "文档.pdf" -o "输出.md"
-
-# 使用 Python 脚本（支持 PDF 编码修复和 LLM 增强）
-python SKILL/markdown-everything/scripts/convert_document.py "文档.pdf" -o "输出.md"
+pip install openai      # GPT-4 增强
+pip install anthropic   # Claude 增强
 ```
 
-### Windows PowerShell 注意事项
+### Conda 环境配置
 
-PowerShell 不支持 `&&` 链接命令，请使用分号 `;` 或分行：
-
-```powershell
-# 正确
-conda activate markitdown; markitdown "文档.pdf" -o "输出.md"
-
-# 正确（分行）
+```bash
+conda create -n markitdown python=3.11 -y
 conda activate markitdown
-markitdown "文档.pdf" -o "输出.md"
-
-# 错误（&& 在部分 PowerShell 版本不可用）
-conda activate markitdown && markitdown "文档.pdf" -o "输出.md"
+pip install "markitdown[all]"
+pip install pdfplumber
 ```
 
-### 高级选项
+---
+
+## 使用方法
+
+### 在 AI Agent 中使用
+
+当你需要 AI Agent 处理某个文档时，可以直接说明需求：
+
+```
+帮我把周报.docx 转成 Markdown 格式
+AI Agent 会自动调用 markitdown 进行转换
+```
+
+支持的触发方式：
+
+1. 直接描述需求：帮我转换这个文档
+2. 指定格式：转换为 Markdown
+3. 批量处理：转换目录下所有文档
+
+### 命令行使用
 
 ```bash
-# JSON 格式输出
-python scripts/convert_document.py "文档.docx" --json-output
+markitdown document.pdf -o output.md
+```
 
-# 详细日志
-python scripts/convert_document.py "文档.docx" --verbose
+---
 
-# LLM 增强
+## 进阶功能
+
+### PDF 中文处理
+
+如果 PDF 中文显示乱码，确保安装了 pdfplumber：
+
+```bash
+pip install pdfplumber
+```
+
+### LLM 增强
+
+启用 GPT-4 优化输出：
+
+```bash
+export OPENAI_API_KEY="your-api-key"
 python scripts/convert_document.py "文档.docx" --llm-client openai --llm-model gpt-4o -o "输出.md"
+```
+
+启用 Claude 优化输出：
+
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
+python scripts/convert_document.py "文档.docx" --llm-client anthropic --llm-model claude-3-sonnet -o "输出.md"
 ```
 
 ### 批量转换
 
+PowerShell 批量转换：
+
 ```powershell
-# Windows PowerShell
 Get-ChildItem "C:\Documents\*.docx" | ForEach-Object {
     markitdown $_.FullName -o "$($_.DirectoryName)\$($_.BaseName).md"
 }
 ```
 
+Linux/macOS 批量转换：
+
 ```bash
-# Linux/macOS
 for f in /path/to/docs/*.docx; do
     markitdown "$f" -o "${f%.docx}.md"
 done
 ```
 
-## 部署到 AI Agent
+---
 
-### OpenAI Codex
+## 常用参数
 
-```bash
-# 下载 skill 到 Codex skills 目录
-$skill-installer install https://github.com/wokaka209/markdown_everything/tree/main/SKILL/markdown-everything
-```
+| 参数 | 说明 |
+|------|------|
+| -o, --output | 指定输出文件路径 |
+| --list-formats | 显示所有支持的格式 |
+| --verbose | 显示详细执行信息 |
+| --json-output | 输出 JSON 格式 |
+| --llm-client | 选择 LLM 客户端 (openai/anthropic) |
+| --llm-model | 指定 LLM 模型 |
 
-或手动将 `SKILL/markdown-everything/` 复制到 `~/.codex/skills/markdown-everything/`。
-
-### Claude Code
-
-```bash
-# 方式一：Skills 格式（推荐，支持自动触发）
-cp -r SKILL/markdown-everything ~/.claude/skills/markdown-everything
-
-# 方式二：Commands 格式（仅手动触发）
-mkdir -p ~/.claude/commands
-cp SKILL/markdown-everything/SKILL.md ~/.claude/commands/markdown.md
-```
-
-### Cursor / Trae / Obsidian YOLO
-
-在 Agent 配置页面添加自定义命令或脚本路径。
+---
 
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `MARKITDOWN_ENV_NAME` | `markitdown` | Conda 环境名称 |
-| `MARKITDOWN_PYTHON_VER` | `3.12` | Conda 环境 Python 版本 |
-| `MARKITDOWN_USE_PIP` | `false` | 设为 `true` 跳过 conda，直接使用系统 pip |
-| `MARKITDOWN_PIP_MIRROR` | `default` | pip 镜像源 (tsinghua/aliyun/douban/custom) |
-| `MARKITDOWN_CUSTOM_MIRROR` | — | 自定义 pip 镜像 URL |
-| `OPENAI_API_KEY` | — | GPT-4 增强转换（可选） |
-| `ANTHROPIC_API_KEY` | — | Claude 增强转换（可选） |
-
-## 常见问题
-
-| 问题 | 解决方案 |
-|------|----------|
-| conda 命令找不到 | 安装 [Miniconda](https://docs.conda.io/en/latest/miniconda.html)；Windows 使用 Anaconda Prompt |
-| pip 安装超时 | 使用镜像源：`pip install "markitdown[all]" -i https://pypi.tuna.tsinghua.edu.cn/simple` |
-| PDF 中文乱码 | 确保安装了 pdfplumber：`pip install pdfplumber` |
-| 输出文件乱码 | 输出为 UTF-8，用 VS Code 打开即可 |
-| PowerShell 不支持 `&&` | 改用分号 `;` 连接命令，或分行执行 |
-
-## 相关链接
-
-- MarkItDown: https://pypi.org/project/markitdown/
-- Agent Skills 标准: https://agentskills.io/
-- Conda: https://docs.conda.io/
+| MARKDOWN_ENV_NAME | markitdown | Conda 环境名称 |
+| MARKDOWN_PYTHON_VER | 3.12 | Python 版本 |
+| MARKDOWN_USE_PIP | false | 设为 true 跳过 Conda |
+| MARKDOWN_PIP_MIRROR | default | 镜像源 |
+| OPENAI_API_KEY | - | GPT-4 API 密钥 |
+| ANTHROPIC_API_KEY | - | Claude API 密钥 |
 
 ---
 
-License: MIT
+## 常见问题
+
+### conda 命令找不到
+
+安装 Miniconda：https://docs.conda.io/en/latest/miniconda.html
+Windows 用户使用 Anaconda Prompt 执行命令。
+
+### pip 安装失败
+
+使用国内镜像源：
+
+```bash
+pip install markitdown[all] -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+### PDF 中文乱码
+
+安装 pdfplumber：
+
+```bash
+pip install pdfplumber
+```
+
+### 输出文件乱码
+
+markitdown 输出 UTF-8 编码。用 VS Code 打开文件，选择"通过编码重新打开"选择 UTF-8。
+
+---
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
+
+1. Fork 本仓库
+2. 创建特性分支 (git checkout -b feature/AmazingFeature)
+3. 提交更改 (git commit -m 'Add some AmazingFeature')
+4. 推送到分支 (git push origin feature/AmazingFeature)
+5. 创建 Pull Request
+
+---
+
+## 相关资源
+
+- markitdown 项目：https://pypi.org/project/markitdown/
+- Agent Skills 标准：https://agentskills.io/
+- Conda 文档：https://docs.conda.io/
+
+---
+
+## 许可证
+
+本项目采用 MIT 许可证 - 详见 LICENSE 文件
+
+---
+
+## 联系方式
+
+项目作者：wokaka209
+项目地址：https://github.com/wokaka209/markdown_everything
+
+[返回顶部](#markdown-everything)
