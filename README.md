@@ -122,11 +122,11 @@ done
 ```bash
 # GPT-4
 export OPENAI_API_KEY="你的key"
-python scripts/convert_document.py "文档.docx" --llm-client openai --llm-model gpt-4o -o "输出.md"
+python SKILL/markdown-everything/scripts/convert_document.py "文档.docx" --llm-client openai --llm-model gpt-4o -o "输出.md"
 
 # Claude
 export ANTHROPIC_API_KEY="你的key"
-python scripts/convert_document.py "文档.docx" --llm-client anthropic --llm-model claude-3-sonnet -o "输出.md"
+python SKILL/markdown-everything/scripts/convert_document.py "文档.docx" --llm-client anthropic --llm-model claude-3-sonnet -o "输出.md"
 ```
 
 ## 常见问题

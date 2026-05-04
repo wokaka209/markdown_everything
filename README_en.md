@@ -122,11 +122,11 @@ Want cleaner output? Run it through GPT-4 or Claude first:
 ```bash
 # GPT-4
 export OPENAI_API_KEY="your-key"
-python scripts/convert_document.py "doc.docx" --llm-client openai --llm-model gpt-4o -o "output.md"
+python SKILL/markdown-everything/scripts/convert_document.py "doc.docx" --llm-client openai --llm-model gpt-4o -o "output.md"
 
 # Claude
 export ANTHROPIC_API_KEY="your-key"
-python scripts/convert_document.py "doc.docx" --llm-client anthropic --llm-model claude-3-sonnet -o "output.md"
+python SKILL/markdown-everything/scripts/convert_document.py "doc.docx" --llm-client anthropic --llm-model claude-3-sonnet -o "output.md"
 ```
 
 ## Troubleshooting
