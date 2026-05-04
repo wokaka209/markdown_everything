@@ -9,3 +9,9 @@
 *__pycache__/
 test_markdown.py
 CODEBUDDY.md
+
+*.zip
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zstd

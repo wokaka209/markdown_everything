@@ -5,13 +5,28 @@ license: MIT
 compatibility: "Requires Python 3.11+ and markitdown package. Supports Windows (PowerShell), macOS, and Linux (Bash)."
 metadata:
   author: wokaka209
-  version: "1.0"
-allowed-tools: Bash(python:*) Bash(markitdown:*) Bash(pip:*) Bash(conda:*) Read Write
+  version: "1.1"
+allowed-tools:
+  - Bash
+  - Read
+  - Write
+  - Grep
+  - Glob
 ---
 
 # markdown-everything
 
 将 PDF、Word、Excel、PPT、图片、音频等 20+ 种文档格式转换为 Markdown，让 AI Agent 能直接读取文档内容。
+
+## 触发条件
+
+当用户要求以下操作时调用此技能：
+- 将文档转换为 Markdown
+- 读取/提取文档内容
+- 批量处理文档
+- 处理中文 PDF 乱码
+
+**注意**：如果用户只是问"怎么用 markitdown"，先回答问题，不要直接触发转换。
 
 ## 支持的格式
 
@@ -22,14 +37,6 @@ allowed-tools: Bash(python:*) Bash(markitdown:*) Bash(pip:*) Bash(conda:*) Read 
 | 音频 | `.mp3` `.wav` `.ogg` `.m4a` |
 | 网页/数据 | `.html` `.htm` `.json` `.xml` |
 | 其他 | `.epub` `.azw3` `.zip` |
-
-## 触发条件
-
-当用户要求以下操作时调用此技能：
-- 将文档转换为 Markdown
-- 读取/提取文档内容
-- 批量处理文档
-- 处理中文 PDF 乱码
 
 ## 使用方法
 
@@ -138,14 +145,33 @@ for f in /path/to/docs/*.docx; do
 done
 ```
 
-## 常见问题
+## 故障排除
+
+### 转换失败
+
+| 错误 | 原因 | 解决方案 |
+|------|------|----------|
+| `ModuleNotFoundError: No module named 'markitdown'` | 未安装依赖 | `pip install "markitdown[all]"` |
+| `No module named 'pdfplumber'` | PDF 处理依赖缺失 | `pip install pdfplumber` |
+| `Unsupported format` | 文件格式不支持 | 检查文件扩展名是否在支持列表中 |
+| `Permission denied` | 文件被占用或权限不足 | 关闭文件，或用管理员权限运行 |
+| `FileNotFoundError` | 文件路径错误 | 使用绝对路径，检查文件名拼写 |
+
+### 输出格式问题
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| 表格错乱 | markitdown 对复杂表格支持有限 | 用 `--json-output` 获取结构化数据，或用 Excel 打开原文件 |
+| 图片丢失 | markitdown 不提取图片 | 图片需要单独处理，用 OCR 工具提取文字 |
+| 中文乱码 | 编码问题 | 确保安装 pdfplumber；用 VS Code 以 UTF-8 打开输出文件 |
+| 链接失效 | 相对路径转换问题 | 检查原文件链接，手动修复 |
+
+### 环境问题
 
 | 问题 | 解决方案 |
 |------|----------|
 | conda 命令找不到 | 安装 [Miniconda](https://docs.conda.io/en/latest/miniconda.html)；Windows 用户使用 Anaconda Prompt |
 | pip 安装超时 | 使用镜像源：`-i https://pypi.tuna.tsinghua.edu.cn/simple` |
-| PDF 中文乱码 | 确保安装了 pdfplumber：`pip install pdfplumber` |
-| 输出文件乱码 | 输出为 UTF-8，用 VS Code 打开即可 |
 | PowerShell 不支持 `&&` | 改用分号 `;` 连接命令，或分行执行 |
 
 ## 环境变量
@@ -157,3 +183,12 @@ done
 | `MARKITDOWN_USE_PIP` | `false` | 设为 `true` 跳过 conda，使用系统 pip |
 | `OPENAI_API_KEY` | — | GPT-4 增强转换 |
 | `ANTHROPIC_API_KEY` | — | Claude 增强转换 |
+
+## 注意事项
+
+- 首次使用会自动检测并安装依赖
+- PDF 中文文档优先使用 pdfplumber 处理
+- 大文件转换可能需要较长时间
+- LLM 增强功能需要 API Key
+- 输出文件默认保存在输入文件同目录
+- Windows 用户：路径中包含空格时，用引号包裹路径
